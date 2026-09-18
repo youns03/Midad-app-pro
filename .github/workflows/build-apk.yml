@@ -31,7 +31,7 @@ jobs:
       - name: Install Android SDK packages
         run: |
           yes | sdkmanager --licenses >/dev/null 2>&1 || true
-          sdkmanager "platforms;android-36.1" "build-tools;36.0.0"
+          sdkmanager "platforms;android-35" "platforms;android-36.1" "build-tools;36.0.0"
 
       - name: Set up Gradle 9.3.1
         uses: gradle/actions/setup-gradle@v6
@@ -43,7 +43,10 @@ jobs:
         run: |
           java -version
           gradle --version
-          sdkmanager --list_installed | grep -E "platforms;android-36.1|build-tools;36.0.0" || true
+          sdkmanager --list_installed | grep -E "platforms;android-35|platforms;android-36.1|build-tools;36.0.0" || true
+
+      - name: Run unit tests
+        run: gradle :app:testDebugUnitTest --no-daemon --stacktrace
 
       - name: Build debug APK
         run: gradle :app:assembleDebug --no-daemon --stacktrace

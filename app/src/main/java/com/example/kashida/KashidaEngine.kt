@@ -244,7 +244,6 @@ object DocumentLayoutEngine {
         val paint = TextPaint().apply {
             this.typeface = typeface
             textSize = fontSizePt
-            color = textColor
             isAntiAlias = true
         }
         val baseLayout = createStaticLayout(text, paint, contentWidth.toInt(), textAlign, lineSpacingMultiplier)
@@ -392,18 +391,34 @@ object DocumentLayoutEngine {
         }
     }
 
-    fun createPageStaticLayout(
+    /**
+     * Draws the already-wrapped lines in [page]. Each consumer uses this
+     * renderer, so rendering cannot introduce a second line break or layout.
+     */
+    fun drawPage(
+        canvas: android.graphics.Canvas,
         page: PageLayout,
         typeface: Typeface,
         fontSizePt: Float,
         textColor: Int = android.graphics.Color.BLACK
-    ): StaticLayout {
+    ) {
         val paint = TextPaint().apply {
             this.typeface = typeface
             textSize = fontSizePt
             color = textColor
             isAntiAlias = true
         }
-        return createStaticLayout(page.renderedText, paint, page.contentWidthPt.toInt(), page.alignment)
+        canvas.save()
+        canvas.translate(page.leftMarginPt, page.topMarginPt)
+        page.lines.forEach { line ->
+            if (line.text.isEmpty()) return@forEach
+            val lineWidth = maxOf(page.contentWidthPt, paint.measureText(line.text)).toInt()
+            val lineLayout = createStaticLayout(line.text, paint, lineWidth, page.alignment, 1f)
+            canvas.save()
+            canvas.translate(0f, line.topPt)
+            lineLayout.draw(canvas)
+            canvas.restore()
+        }
+        canvas.restore()
     }
 }

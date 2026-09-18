@@ -12,6 +12,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 import kotlin.math.roundToInt
 
 object ImageExporter {
@@ -22,30 +24,48 @@ object ImageExporter {
         context: Context, layout: DocumentLayoutEngine.DocumentLayout, title: String, typeface: Typeface,
         fontSizePt: Float, textColor: Int, pageColor: Int
     ): Uri? = withContext(Dispatchers.IO) {
+        val generatedFiles = mutableListOf<File>()
         try {
             val scale = PX_PER_INCH / PT_PER_INCH
-            val widthPx = (layout.pageWidthPt * scale).roundToInt()
-            val heightPx = (layout.pageHeightPt * scale).roundToInt()
-            val totalHeightPx = (heightPx.toLong() * layout.pageCount).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
-            val bitmap = Bitmap.createBitmap(widthPx.coerceAtLeast(1), totalHeightPx.coerceAtLeast(1), Bitmap.Config.ARGB_8888)
-            val canvas = Canvas(bitmap)
-            val bgPaint = Paint().apply { color = pageColor }
-            for (page in layout.pages) {
-                val yOffset = page.index * heightPx
-                canvas.drawRect(0f, yOffset.toFloat(), widthPx.toFloat(), (yOffset + heightPx).toFloat(), bgPaint)
-                val pageStaticLayout = DocumentLayoutEngine.createPageStaticLayout(page, typeface, fontSizePt, textColor)
-                canvas.save()
-                canvas.translate(page.leftMarginPt * scale, yOffset + page.topMarginPt * scale)
-                canvas.scale(scale, scale)
-                pageStaticLayout.draw(canvas)
-                canvas.restore()
-            }
+            val widthPx = (layout.pageWidthPt * scale).roundToInt().coerceAtLeast(1)
+            val heightPx = (layout.pageHeightPt * scale).roundToInt().coerceAtLeast(1)
             val exportsDir = File(context.cacheDir, "exports").apply { mkdirs() }
             val sanitizedTitle = title.replace(Regex("[^a-zA-Z0-9\\u0600-\\u06FF_-]"), "_")
-            val imageFile = File(exportsDir, "" + sanitizedTitle + "_" + System.currentTimeMillis() + ".png")
-            FileOutputStream(imageFile).use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
-            bitmap.recycle()
-            FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", imageFile)
-        } catch (e: Exception) { e.printStackTrace(); null }
+
+            layout.pages.forEach { page ->
+                val bitmap = Bitmap.createBitmap(widthPx, heightPx, Bitmap.Config.ARGB_8888)
+                try {
+                    val canvas = Canvas(bitmap)
+                    canvas.drawColor(pageColor)
+                    canvas.scale(scale, scale)
+                    DocumentLayoutEngine.drawPage(canvas, page, typeface, fontSizePt, textColor)
+                    val pngFile = File(exportsDir, "${sanitizedTitle}_page_${page.index + 1}_${System.currentTimeMillis()}.png")
+                    FileOutputStream(pngFile).use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                    generatedFiles += pngFile
+                } finally {
+                    bitmap.recycle()
+                }
+            }
+
+            val resultFile = if (generatedFiles.size == 1) {
+                generatedFiles.single()
+            } else {
+                val zipFile = File(exportsDir, "${sanitizedTitle}_${System.currentTimeMillis()}.zip")
+                ZipOutputStream(FileOutputStream(zipFile)).use { zip ->
+                    generatedFiles.forEach { file ->
+                        zip.putNextEntry(ZipEntry(file.name))
+                        file.inputStream().use { it.copyTo(zip) }
+                        zip.closeEntry()
+                        file.delete()
+                    }
+                }
+                zipFile
+            }
+            FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", resultFile)
+        } catch (e: Exception) {
+            generatedFiles.forEach { it.delete() }
+            e.printStackTrace()
+            null
+        }
     }
 }

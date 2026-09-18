@@ -1,6 +1,8 @@
 package com.example
 
 import android.content.Context
+import android.graphics.Typeface
+import android.text.TextPaint
 import androidx.test.core.app.ApplicationProvider
 import com.example.kashida.KashidaEngine
 import com.example.model.KashidaLevel
@@ -12,7 +14,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [36])
+@Config(sdk = [35])
 class ExampleRobolectricTest {
 
   @Test
@@ -32,7 +34,12 @@ class ExampleRobolectricTest {
   @Test
   fun `verify smart kashida insertion`() {
     val text = "بسم الله الرحمن الرحيم الحمد لله رب العالمين"
-    val kashidaText = KashidaEngine.applySmartKashida(text, KashidaLevel.MEDIUM)
+    val paint = TextPaint().apply {
+      typeface = Typeface.DEFAULT
+      textSize = 18f
+    }
+    val kashidaText = KashidaEngine.shapeLine(text, 200f, KashidaLevel.MEDIUM, paint)
     assertTrue("Should insert tatweel character", kashidaText.contains("ـ"))
+    assertEquals(text, KashidaEngine.stripKashida(kashidaText))
   }
 }

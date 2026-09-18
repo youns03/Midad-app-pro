@@ -1,5 +1,7 @@
 package com.example
 
+import android.graphics.Typeface
+import android.text.TextPaint
 import com.example.kashida.KashidaEngine
 import com.example.model.KashidaLevel
 import com.example.model.MarginUnit
@@ -53,7 +55,11 @@ class ExampleUnitTest {
     @Test
     fun testSmartKashidaApplication() {
         val input = "الخط العربي فن جميل ورائع"
-        val applied = KashidaEngine.applySmartKashida(input, KashidaLevel.MEDIUM)
+        val paint = TextPaint().apply {
+            typeface = Typeface.DEFAULT
+            textSize = 18f
+        }
+        val applied = KashidaEngine.shapeLine(input, 200f, KashidaLevel.MEDIUM, paint)
         assertTrue(applied.contains(KashidaEngine.TATWEEL))
         assertEquals(input, KashidaEngine.stripKashida(applied))
     }

@@ -555,6 +555,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 val resolver = getApplication<Application>().contentResolver
                 val displayName = resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
                     ?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
+                if (!TextImportCodec.isSupportedFileName(displayName)) {
+                    error("UNSUPPORTED_TEXT_FILE")
+                }
                 val title = TextImportCodec.titleFromDisplayName(displayName)
                 val content = resolver.openInputStream(uri)?.use { input ->
                     TextImportCodec.readUtf8(input)
@@ -584,8 +587,13 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 val id = documentRepo.saveDocument(imported)
                 openDocument(id)
                 _uiState.update { it.copy(isExporting = false, exportMessage = "تم استيراد الملف كنص قابل للتحرير") }
-            }.onFailure {
-                _uiState.update { it.copy(isExporting = false, exportMessage = "تعذر قراءة الملف النصي UTF-8") }
+            }.onFailure { error ->
+                val message = if (error.message == "UNSUPPORTED_TEXT_FILE") {
+                    "يرجى اختيار ملف TXT أو MD فقط"
+                } else {
+                    "تعذر قراءة الملف النصي UTF-8"
+                }
+                _uiState.update { it.copy(isExporting = false, exportMessage = message) }
             }
         }
     }

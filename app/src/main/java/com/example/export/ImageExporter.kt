@@ -33,7 +33,7 @@ object ImageExporter {
             for (page in layout.pages) {
                 val yOffset = page.index * heightPx
                 canvas.drawRect(0f, yOffset.toFloat(), widthPx.toFloat(), (yOffset + heightPx).toFloat(), bgPaint)
-                val pageStaticLayout = DocumentLayoutEngine.createPageStaticLayout(page, typeface, fontSizePt, com.example.model.TextAlignOption.JUSTIFY)
+                val pageStaticLayout = DocumentLayoutEngine.createPageStaticLayout(page, typeface, fontSizePt)
                 canvas.save()
                 canvas.translate(page.leftMarginPt * scale, yOffset + page.topMarginPt * scale)
                 canvas.scale(scale, scale)

@@ -91,6 +91,7 @@ fun HomeScreen(
     viewModel: EditorViewModel,
     uiState: EditorUiState,
     onImportFontClick: () -> Unit,
+    onImportTextClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -138,6 +139,9 @@ fun HomeScreen(
                             IconButton(onClick = { isSearchActive = true }) {
                                 Icon(Icons.Outlined.Search, contentDescription = "بحث")
                             }
+                            IconButton(onClick = onImportTextClick) {
+                                Icon(Icons.Outlined.FileUpload, contentDescription = "استيراد ملف نصي")
+                            }
                         }
                         IconButton(onClick = { viewModel.selectHomeTab(HomeTab.TEMPLATES) }) {
                             Icon(Icons.Outlined.AutoAwesome, contentDescription = "القوالب الجاهزة")
@@ -147,14 +151,14 @@ fun HomeScreen(
                         }
                     },
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
                     )
                 )
             },
             bottomBar = {
                 NavigationBar(
                     containerColor = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 6.dp
+                        tonalElevation = 3.dp
                 ) {
                     val tabs = listOf(
                         Triple(HomeTab.DOCUMENTS, "المستندات", Icons.Outlined.Description),
@@ -183,13 +187,13 @@ fun HomeScreen(
                         contentColor = MaterialTheme.colorScheme.onPrimary,
                         shape = CircleShape,
                         modifier = Modifier
-                            .size(60.dp)
+                            .size(56.dp)
                             .testTag("home_create_fab")
                     ) {
                         Icon(
                             Icons.Outlined.Add,
                             contentDescription = "إنشاء مستند جديد",
-                            modifier = Modifier.size(30.dp)
+                            modifier = Modifier.size(26.dp)
                         )
                     }
                 }
@@ -217,7 +221,8 @@ fun HomeScreen(
                                 PdfExporter.shareFile(context, uri, "application/pdf", "مشاركة مستند PDF")
                             }
                         },
-                        onCreateNew = { viewModel.createNewDocument() }
+                        onCreateNew = { viewModel.createNewDocument() },
+                        onImportText = onImportTextClick
                     )
 
                     HomeTab.TEMPLATES -> TemplatesTabContent(
@@ -254,7 +259,8 @@ fun DocumentsTabContent(
     onDuplicate: (DocumentEntity) -> Unit,
     onDelete: (DocumentEntity) -> Unit,
     onShare: (DocumentEntity) -> Unit,
-    onCreateNew: () -> Unit
+    onCreateNew: () -> Unit,
+    onImportText: () -> Unit
 ) {
     if (documents.isEmpty()) {
         Box(
@@ -299,6 +305,14 @@ fun DocumentsTabContent(
                     Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(6.dp))
                     Text("إنشاء مستند جديد")
+                }
+                FilledTonalButton(
+                    onClick = onImportText,
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Outlined.FileUpload, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("استيراد ملف نصي")
                 }
             }
         }

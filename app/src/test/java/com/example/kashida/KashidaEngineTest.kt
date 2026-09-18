@@ -52,7 +52,7 @@ class KashidaEngineTest {
             paint = paint
         )
 
-        assertEquals(source, source)
+        assertFalse(source.contains(KashidaEngine.TATWEEL))
         assertTrue(shaped.contains(source.first()))
     }
 

@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
@@ -40,6 +41,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,7 +54,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.example.kashida.KashidaEngine
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Typeface
+import android.view.View
+import com.example.kashida.DocumentLayoutEngine
 import com.example.model.DocumentTemplate
 import com.example.model.FontItem
 import com.example.model.TextAlignOption
@@ -370,21 +376,12 @@ fun FontLibraryDialog(
 @Composable
 fun PreviewExportDialog(
     uiState: EditorUiState,
+    documentLayout: DocumentLayoutEngine.DocumentLayout,
+    typeface: Typeface,
     onExportPdf: () -> Unit,
     onExportPng: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    val renderedText = if (uiState.kashidaEnabled && uiState.textAlign == TextAlignOption.JUSTIFY) {
-        KashidaEngine.applySmartKashida(uiState.text, uiState.kashidaLevel)
-    } else {
-        uiState.text
-    }
-
-    val topPadDp = (uiState.margins.topMm * 0.9f).dp
-    val bottomPadDp = (uiState.margins.bottomMm * 0.9f).dp
-    val rightPadDp = (uiState.margins.rightMm * 0.9f).dp
-    val leftPadDp = (uiState.margins.leftMm * 0.9f).dp
-
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         Dialog(
             onDismissRequest = onDismiss,
@@ -403,7 +400,6 @@ fun PreviewExportDialog(
                         .fillMaxSize()
                         .padding(16.dp)
                 ) {
-                    // Header with Paper Details
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -416,12 +412,11 @@ fun PreviewExportDialog(
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "المقاس: ${uiState.paperSize.displayNameAr} • الخط: ${uiState.selectedFont.nameAr}",
+                                text = "المقاس: ${uiState.paperSize.displayNameAr} • الخط: ${uiState.selectedFont.nameAr} • الصفحات: ${documentLayout.pageCount}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.outline
                             )
                         }
-
                         IconButton(onClick = onDismiss) {
                             Icon(Icons.Default.Close, contentDescription = "إغلاق")
                         }
@@ -429,50 +424,37 @@ fun PreviewExportDialog(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // Simulated Printable Page Container
-                    Box(
+                    LazyColumn(
                         modifier = Modifier
                             .weight(1f)
-                            .fillMaxWidth()
-                            .background(MaterialTheme.colorScheme.surfaceContainerLowest, RoundedCornerShape(12.dp))
-                            .padding(12.dp)
-                            .verticalScroll(rememberScrollState()),
-                        contentAlignment = Alignment.TopCenter
+                            .fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
-                        Surface(
-                            shape = RoundedCornerShape(4.dp),
-                            color = uiState.pageColor,
-                            shadowElevation = 8.dp,
-                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .aspectRatio(uiState.paperSize.widthMm / uiState.paperSize.heightMm)
-                        ) {
-                            Box(
+                        items(documentLayout.pages.size) { pageIndex ->
+                            val page = documentLayout.pages[pageIndex]
+                            AndroidView(
+                                factory = { context ->
+                                    DocumentPagePreviewView(context)
+                                },
+                                update = { view ->
+                                    view.page = page
+                                    view.typeface = typeface
+                                    view.fontSizePt = uiState.fontSizePt
+                                    view.textColor = uiState.textColor.toArgb()
+                                    view.pageColor = uiState.pageColor.toArgb()
+                                    view.invalidate()
+                                },
                                 modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(
-                                        top = topPadDp,
-                                        bottom = bottomPadDp,
-                                        end = leftPadDp,
-                                        start = rightPadDp
+                                    .fillMaxWidth()
+                                    .aspectRatio(
+                                        documentLayout.pageWidthPt / documentLayout.pageHeightPt
                                     )
-                            ) {
-                                Text(
-                                    text = renderedText,
-                                    fontFamily = uiState.selectedFont.fontFamily,
-                                    fontSize = uiState.fontSizePt.sp,
-                                    color = uiState.textColor,
-                                    textAlign = uiState.textAlign.composeAlign,
-                                    lineHeight = (uiState.fontSizePt * 1.55f).sp
-                                )
-                            }
+                            )
                         }
                     }
 
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    // Export Buttons Row
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -506,5 +488,40 @@ fun PreviewExportDialog(
                 }
             }
         }
+    }
+}
+
+private class DocumentPagePreviewView(context: android.content.Context) : View(context) {
+    var page: DocumentLayoutEngine.PageLayout? = null
+    var typeface: Typeface = Typeface.DEFAULT
+    var fontSizePt: Float = 18f
+    var textColor: Int = android.graphics.Color.BLACK
+    var pageColor: Int = android.graphics.Color.WHITE
+
+    override fun onDraw(canvas: Canvas) {
+        super.onDraw(canvas)
+        val currentPage = page ?: return
+        val scale = width.toFloat() / currentPage.widthPt.coerceAtLeast(1f)
+
+        canvas.drawColor(pageColor)
+        canvas.save()
+        canvas.scale(scale, scale)
+        canvas.translate(currentPage.leftMarginPt, currentPage.topMarginPt)
+
+        val layout = DocumentLayoutEngine.createPageStaticLayout(
+            currentPage,
+            typeface,
+            fontSizePt
+        )
+        val paint = Paint().apply {
+            color = textColor
+            style = Paint.Style.STROKE
+            isAntiAlias = true
+        }
+        layout.draw(canvas)
+        canvas.restore()
+
+        paint.color = 0x22000000
+        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
     }
 }

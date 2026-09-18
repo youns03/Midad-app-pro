@@ -75,7 +75,10 @@ class KashidaEngineTest {
         assertTrue(layout.pageCount > 1)
         assertEquals(source, layout.rawText)
         assertTrue(layout.pages.all { page ->
-            page.lines.zipWithNext().all { (a, b) -> b.topPt >= a.topPt }
+            page.lines.zipWithNext().all { (a, b) ->
+                a.rawStart <= a.rawEnd && a.rawEnd <= b.rawStart &&
+                    !a.text.contains('\n') && !b.text.contains('\n')
+            }
         })
     }
 

@@ -1,0 +1,6 @@
+{
+  "name": "مِداد",
+  "description": "محرر وتنسيق نصوص عربي احترافي بديل لمستندات جوجل مع دعم الكشيدة وتصدير PDF والخطوط",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

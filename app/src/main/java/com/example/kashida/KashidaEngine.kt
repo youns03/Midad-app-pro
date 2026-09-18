@@ -401,6 +401,7 @@ object DocumentLayoutEngine {
         val paint = TextPaint().apply {
             this.typeface = typeface
             textSize = fontSizePt
+            color = textColor
             isAntiAlias = true
         }
         return createStaticLayout(page.renderedText, paint, page.contentWidthPt.toInt(), page.alignment)

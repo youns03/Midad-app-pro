@@ -1,206 +1,407 @@
 package com.example.kashida
 
+import android.graphics.Typeface
+import android.text.Layout
+import android.text.StaticLayout
+import android.text.TextDirectionHeuristics
+import android.text.TextPaint
 import com.example.model.KashidaLevel
+import com.example.model.MarginUnit
+import com.example.model.PageMargins
+import com.example.model.PageSize
+import com.example.model.TextAlignOption
+import kotlin.math.ceil
+import kotlin.math.max
 
 /**
- * Intelligent Arabic Kashida (Tatweel) Engine.
- * Follows classical Arabic typographic rules and distributes extensions
- * harmoniously across words and lines.
+ * Layout-time Arabic kashida shaping.
+ *
+ * The stored document text is never modified by this engine. It operates on
+ * the line fragments produced by [DocumentLayoutEngine] and returns render
+ * text only.
  */
 object KashidaEngine {
 
-    const val TATWEEL = '\u0640' // ـ
+    const val TATWEEL = '\u0640'
 
-    // Arabic letters that DO NOT connect to the subsequent letter (حروف الانفصال)
-    private val NON_CONNECTING_FORWARD: Set<Char> = setOf(
+    private val NON_CONNECTING_FORWARD = setOf(
         'ا', 'أ', 'إ', 'آ', 'ء', 'د', 'ذ', 'ر', 'ز', 'و', 'ؤ', 'ة', 'ى',
-        '\u0671', // Wasla Alef
-        '\u0672', '\u0673', '\u0675', '\u0688', '\u068c', '\u068d', '\u068e', '\u0698', '\u06c6', '\u06c7', '\u06c8', '\u06cb', '\u06cf'
+        '\u0671', '\u0672', '\u0673', '\u0675', '\u0688', '\u068c',
+        '\u068d', '\u068e', '\u0698', '\u06c6', '\u06c7', '\u06c8',
+        '\u06cb', '\u06cf'
     )
 
-    // Arabic diacritics / Tashkeel
-    private val DIACRITICS: Set<Char> = setOf(
-        '\u064B', '\u064C', '\u064D', '\u064E', '\u064F', '\u0650', '\u0651', '\u0652', '\u0670'
-    )
+    fun isDiacritic(c: Char): Boolean =
+        c in '\u0610'..'\u061A' ||
+        c in '\u064B'..'\u065F' ||
+        c == '\u0670' ||
+        c in '\u06D6'..'\u06ED'
 
-    /**
-     * Checks if a character is an Arabic letter.
-     */
-    fun isArabicLetter(c: Char): Boolean {
-        return (c in '\u0621'..'\u064A') || (c in '\u0671'..'\u06D3')
-    }
+    fun isArabicLetter(c: Char): Boolean =
+        (c in '\u0621'..'\u064A') || (c in '\u0671'..'\u06D3')
 
-    /**
-     * Removes all tatweel characters from the given text.
-     */
-    fun stripKashida(text: String): String {
-        return text.replace(TATWEEL.toString(), "")
-    }
+    fun stripKashida(text: String): String = text.replace(TATWEEL.toString(), "")
 
-    /**
-     * Checks whether a tatweel can be placed between char at index [pos] and the next letter.
-     */
     fun canConnectForward(firstChar: Char, secondChar: Char): Boolean {
         if (!isArabicLetter(firstChar) || !isArabicLetter(secondChar)) return false
         if (firstChar in NON_CONNECTING_FORWARD) return false
-        // Avoid breaking Lam-Alef ligature (لا, لأ, لإ, لآ)
-        if (firstChar == 'ل' && (secondChar == 'ا' || secondChar == 'أ' || secondChar == 'إ' || secondChar == 'آ')) {
-            return false
-        }
+        if (firstChar == 'ل' && secondChar in setOf('ا', 'أ', 'إ', 'آ')) return false
         return true
     }
 
-    /**
-     * A connection point in an Arabic word where kashida can be added or adjusted.
-     */
     data class ConnectionPoint(
-        val indexInWord: Int,        // Index in clean word after which tatweel goes
+        val indexInWord: Int,
         val firstChar: Char,
         val secondChar: Char,
-        val currentTatweels: Int = 0,
-        val aestheticScore: Int = 1  // Higher means preferred in traditional calligraphy
+        val insertionIndex: Int = indexInWord + 1,
+        val aestheticScore: Int = 1
     )
 
     /**
-     * Finds all valid connection points in a single Arabic word.
+     * Returns connection points as insertion offsets in the original word.
+     * Diacritics attached to the first letter remain before the inserted
+     * tatweel, so tashkeel is never displaced.
      */
     fun findConnectionPointsInWord(word: String): List<ConnectionPoint> {
         val cleanWord = stripKashida(word)
+        if (cleanWord.length < 2) return emptyList()
+
         val points = mutableListOf<ConnectionPoint>()
-        if (cleanWord.length < 2) return points
+        var i = 0
+        while (i < cleanWord.length) {
+            val first = cleanWord[i]
+            if (!isArabicLetter(first)) {
+                i++
+                continue
+            }
 
-        for (i in 0 until cleanWord.length - 1) {
-            val c1 = cleanWord[i]
-            val c2 = cleanWord[i + 1]
+            var insertion = i + 1
+            while (insertion < cleanWord.length && isDiacritic(cleanWord[insertion])) {
+                insertion++
+            }
 
-            if (canConnectForward(c1, c2)) {
-                // Calculate aesthetic score based on calligraphy conventions
-                var score = 1
-                // Preferred before final letter
-                if (i == cleanWord.length - 2) score += 3
-                // Preferred after Seen/Sheen
-                if (c1 == 'س' || c1 == 'ش') score += 2
-                // Preferred after Saad/Daad/Taa/Zhaa
-                if (c1 in setOf('ص', 'ض', 'ط', 'ظ')) score += 2
-                // Preferred between Ba/Ta/Tha/Noon/Ya
-                if (c1 in setOf('ب', 'ت', 'ث', 'ن', 'ي', 'ئ')) score += 1
-                // Preferred after Fa/Qaf
-                if (c1 == 'ف' || c1 == 'ق') score += 1
-
-                points.add(
-                    ConnectionPoint(
+            if (insertion < cleanWord.length) {
+                val second = cleanWord[insertion]
+                if (canConnectForward(first, second)) {
+                    var score = 1
+                    if (second !in NON_CONNECTING_FORWARD) score += 1
+                    if (first in setOf('س', 'ش', 'ص', 'ض', 'ط', 'ظ')) score += 2
+                    if (first in setOf('ب', 'ت', 'ث', 'ن', 'ي', 'ئ')) score += 1
+                    if (first in setOf('ف', 'ق')) score += 1
+                    points += ConnectionPoint(
                         indexInWord = i,
-                        firstChar = c1,
-                        secondChar = c2,
+                        firstChar = first,
+                        secondChar = second,
+                        insertionIndex = insertion,
                         aestheticScore = score
                     )
-                )
+                }
             }
+            i = insertion
         }
         return points
     }
 
     /**
-     * Applies automatic smart Kashida distribution across text.
-     * When level is OFF or text is empty, returns original stripped text.
-     * Distributes extensions gracefully across lines and words without overloading any single point.
+     * Shapes one already-wrapped line to consume as much of [deficitPx] as
+     * possible without changing its line break. The original line remains
+     * untouched; the returned value is render-only.
      */
-    fun applySmartKashida(text: String, level: KashidaLevel): String {
-        if (level == KashidaLevel.OFF || text.isBlank()) {
-            return stripKashida(text)
-        }
+    fun shapeLine(
+        line: String,
+        deficitPx: Float,
+        level: KashidaLevel,
+        paint: TextPaint
+    ): String {
+        if (level == KashidaLevel.OFF || deficitPx <= 0f || line.isBlank()) return line
 
-        val lines = text.split("\n")
-        val processedLines = lines.map { line ->
-            processLineKashida(line, level)
-        }
-        return processedLines.joinToString("\n")
-    }
+        val clean = stripKashida(line)
+        val points = findConnectionPointsInWord(clean)
+        if (points.isEmpty()) return clean
 
-    private fun processLineKashida(line: String, level: KashidaLevel): String {
-        if (line.isBlank()) return line
-
-        val cleanLine = stripKashida(line)
-        val tokens = cleanLine.split(" ")
-        if (tokens.isEmpty()) return line
-
-        val wordsWithPoints = tokens.mapIndexed { wordIdx, word ->
-            val points = findConnectionPointsInWord(word)
-            Triple(wordIdx, word, points)
-        }
-
-        // Collect all available points with global scoring
-        val candidatePoints = mutableListOf<Triple<Int, Int, ConnectionPoint>>() // (wordIdx, pointIdxInWord, point)
-        for ((wordIdx, _, points) in wordsWithPoints) {
-            for ((pointIdx, point) in points.withIndex()) {
-                candidatePoints.add(Triple(wordIdx, pointIdx, point))
-            }
-        }
-
-        if (candidatePoints.isEmpty()) return cleanLine
-
-        // Sort points by calligraphy aesthetic preference
-        candidatePoints.sortByDescending { it.third.aestheticScore }
-
-        // Determine how many points to extend based on level and line length
-        val pointsToExtend = when (level) {
+        val insertions = IntArray(points.size)
+        val maxPerPoint = when (level) {
             KashidaLevel.OFF -> 0
-            KashidaLevel.LIGHT -> (tokens.size / 3).coerceIn(1, 3)
-            KashidaLevel.MEDIUM -> (tokens.size / 2).coerceIn(2, 5)
-            KashidaLevel.HEAVY -> (tokens.size * 2 / 3).coerceIn(3, 8)
+            KashidaLevel.LIGHT -> 8
+            KashidaLevel.MEDIUM -> 16
+            KashidaLevel.HEAVY -> 32
         }
 
-        val tatweelsPerPoint = level.tatweelCount
-        val tatweelInsertionMap = mutableMapOf<Pair<Int, Int>, Int>() // (wordIdx, indexInWord) -> count
-
-        // Distribute to top scored candidates, ensuring words aren't over-extended
-        val selectedWords = mutableSetOf<Int>()
-        var count = 0
-        for (candidate in candidatePoints) {
-            val wordIdx = candidate.first
-            val indexInWord = candidate.third.indexInWord
-
-            // Avoid putting multiple kashidas in the same short word
-            if (selectedWords.contains(wordIdx) && tokens[wordIdx].length <= 5) {
-                continue
-            }
-
-            tatweelInsertionMap[Pair(wordIdx, indexInWord)] = tatweelsPerPoint
-            selectedWords.add(wordIdx)
-            count++
-            if (count >= pointsToExtend) break
-        }
-
-        // Reconstruct line with kashida
-        val reconstructedWords = tokens.mapIndexed { wordIdx, word ->
-            val sb = StringBuilder()
-            for (charIdx in word.indices) {
-                sb.append(word[charIdx])
-                val added = tatweelInsertionMap[Pair(wordIdx, charIdx)] ?: 0
-                repeat(added) {
-                    sb.append(TATWEEL)
+        var remaining = deficitPx
+        var progress = true
+        while (remaining > 0.05f && progress) {
+            progress = false
+            val ordered = points.indices.sortedByDescending { points[it].aestheticScore }
+            for (pointIndex in ordered) {
+                if (insertions[pointIndex] >= maxPerPoint) continue
+                val candidate = buildWithInsertions(clean, points, insertions, pointIndex)
+                val widthBefore = paint.measureText(buildWithInsertions(clean, points, insertions))
+                val widthAfter = paint.measureText(candidate)
+                val delta = widthAfter - widthBefore
+                if (delta > 0f && delta <= remaining + 0.01f) {
+                    insertions[pointIndex]++
+                    remaining -= delta
+                    progress = true
                 }
+                if (remaining <= 0.05f) break
             }
-            sb.toString()
         }
 
-        return reconstructedWords.joinToString(" ")
+        return buildWithInsertions(clean, points, insertions)
     }
 
-    /**
-     * Applies manual kashida count at a specific point in a word.
-     */
-    fun applyManualKashidaToWord(cleanWord: String, connectionIndex: Int, tatweelCount: Int): String {
-        if (connectionIndex < 0 || connectionIndex >= cleanWord.length) return cleanWord
-        val sb = StringBuilder()
-        for (i in cleanWord.indices) {
-            sb.append(cleanWord[i])
-            if (i == connectionIndex) {
-                repeat(tatweelCount.coerceIn(0, 10)) {
-                    sb.append(TATWEEL)
-                }
-            }
+    private fun buildWithInsertions(
+        text: String,
+        points: List<ConnectionPoint>,
+        insertions: IntArray,
+        extraPoint: Int? = null
+    ): String {
+        val counts = insertions.copyOf()
+        if (extraPoint != null) counts[extraPoint]++
+        val byOffset = points.associateBy { it.insertionIndex }
+        val sb = StringBuilder(text.length + counts.sum())
+        for (i in text.indices) {
+            sb.append(text[i])
+            val pointIndex = points.indexOfFirst { it.insertionIndex == i + 1 }
+            if (pointIndex >= 0) repeat(counts[pointIndex]) { sb.append(TATWEEL) }
         }
         return sb.toString()
+    }
+
+    fun applyManualKashidaToWord(
+        cleanWord: String,
+        connectionIndex: Int,
+        tatweelCount: Int
+    ): String {
+        if (connectionIndex !in cleanWord.indices) return cleanWord
+        val count = tatweelCount.coerceIn(0, 10)
+        val points = findConnectionPointsInWord(cleanWord)
+        val point = points.firstOrNull { it.indexInWord == connectionIndex }
+            ?: return cleanWord
+        return cleanWord.substring(0, point.insertionIndex) +
+            TATWEEL.toString().repeat(count) +
+            cleanWord.substring(point.insertionIndex)
+    }
+}
+
+/**
+ * Canonical document layout used by preview and export.
+ * Document units are points; screen dp/sp conversion belongs to UI only.
+ */
+object DocumentLayoutEngine {
+
+    data class LayoutLine(
+        val rawStart: Int,
+        val rawEnd: Int,
+        val text: String,
+        val topPt: Float,
+        val bottomPt: Float,
+        val baselinePt: Float,
+        val widthPt: Float,
+        val paragraphEnd: Boolean
+    )
+
+    data class PageLayout(
+        val index: Int,
+        val lines: List<LayoutLine>,
+        val renderedText: String,
+        val widthPt: Float,
+        val heightPt: Float,
+        val contentWidthPt: Float,
+        val contentHeightPt: Float,
+        val leftMarginPt: Float,
+        val topMarginPt: Float
+    )
+
+    data class DocumentLayout(
+        val pages: List<PageLayout>,
+        val pageWidthPt: Float,
+        val pageHeightPt: Float,
+        val contentWidthPt: Float,
+        val contentHeightPt: Float,
+        val rawText: String
+    ) {
+        val pageCount: Int get() = pages.size
+    }
+
+    fun build(
+        text: String,
+        typeface: Typeface,
+        fontSizePt: Float,
+        textAlign: TextAlignOption,
+        margins: PageMargins,
+        pageSize: PageSize,
+        kashidaEnabled: Boolean,
+        kashidaLevel: KashidaLevel,
+        lineSpacingMultiplier: Float = 1.35f
+    ): DocumentLayout {
+        val pageWidth = pageSize.widthPt
+        val pageHeight = pageSize.heightPt
+        val left = margins.leftMm * 72f / 25.4f
+        val right = margins.rightMm * 72f / 25.4f
+        val top = margins.topMm * 72f / 25.4f
+        val bottom = margins.bottomMm * 72f / 25.4f
+        val contentWidth = (pageWidth - left - right).coerceAtLeast(1f)
+        val contentHeight = (pageHeight - top - bottom).coerceAtLeast(1f)
+
+        val paint = TextPaint().apply {
+            this.typeface = typeface
+            textSize = fontSizePt
+            isAntiAlias = true
+        }
+        val baseLayout = createStaticLayout(text, paint, contentWidth.toInt(), textAlign, lineSpacingMultiplier)
+        val lines = mutableListOf<LayoutLine>()
+
+        for (i in 0 until baseLayout.lineCount) {
+            val rawStart = baseLayout.getLineStart(i)
+            val rawEndWithBreak = baseLayout.getLineEnd(i)
+            val rawEnd = rawEndWithBreak
+                .coerceAtMost(text.length)
+                .let { end -> if (end > rawStart && text[end - 1] == '\n') end - 1 else end }
+                .let { end -> if (end > rawStart && text[end - 1] == '\r') end - 1 else end }
+            val rawLine = text.substring(rawStart, rawEnd)
+            val isLastLine = i == baseLayout.lineCount - 1
+            val hasParagraphBreak = rawEndWithBreak > rawEnd
+            val rawWidth = paint.measureText(rawLine)
+            val canJustify = textAlign == TextAlignOption.JUSTIFY && !isLastLine && !hasParagraphBreak
+            val rendered = if (kashidaEnabled && canJustify) {
+                KashidaEngine.shapeLine(
+                    rawLine,
+                    (contentWidth - rawWidth).coerceAtLeast(0f),
+                    kashidaLevel,
+                    paint
+                )
+            } else rawLine
+            val width = paint.measureText(rendered)
+            lines += LayoutLine(
+                rawStart = rawStart,
+                rawEnd = rawEnd,
+                text = rendered,
+                topPt = baseLayout.getLineTop(i).toFloat(),
+                bottomPt = baseLayout.getLineBottom(i).toFloat(),
+                baselinePt = baseLayout.getLineBaseline(i).toFloat(),
+                widthPt = width,
+                paragraphEnd = hasParagraphBreak
+            )
+        }
+
+        val pages = paginate(
+            lines = lines,
+            rawText = text,
+            pageWidth = pageWidth,
+            pageHeight = pageHeight,
+            contentWidth = contentWidth,
+            contentHeight = contentHeight,
+            left = left,
+            top = top
+        )
+
+        return DocumentLayout(
+            pages = pages,
+            pageWidthPt = pageWidth,
+            pageHeightPt = pageHeight,
+            contentWidthPt = contentWidth,
+            contentHeightPt = contentHeight,
+            rawText = text
+        )
+    }
+
+    private fun paginate(
+        lines: List<LayoutLine>,
+        rawText: String,
+        pageWidth: Float,
+        pageHeight: Float,
+        contentWidth: Float,
+        contentHeight: Float,
+        left: Float,
+        top: Float
+    ): List<PageLayout> {
+        if (lines.isEmpty()) {
+            return listOf(
+                PageLayout(0, emptyList(), "", pageWidth, pageHeight, contentWidth, contentHeight, left, top)
+            )
+        }
+
+        val pages = mutableListOf<PageLayout>()
+        var pageLines = mutableListOf<LayoutLine>()
+        var usedHeight = 0f
+        var pageIndex = 0
+
+        fun flush() {
+            val normalized = pageLines.map {
+                it.copy(
+                    topPt = it.topPt - (pageLines.firstOrNull()?.topPt ?: 0f),
+                    bottomPt = it.bottomPt - (pageLines.firstOrNull()?.topPt ?: 0f),
+                    baselinePt = it.baselinePt - (pageLines.firstOrNull()?.topPt ?: 0f)
+                )
+            }
+            pages += PageLayout(
+                index = pageIndex++,
+                lines = normalized,
+                renderedText = normalized.joinToString("\n") { it.text },
+                widthPt = pageWidth,
+                heightPt = pageHeight,
+                contentWidthPt = contentWidth,
+                contentHeightPt = contentHeight,
+                leftMarginPt = left,
+                topMarginPt = top
+            )
+            pageLines = mutableListOf()
+            usedHeight = 0f
+        }
+
+        for (line in lines) {
+            val lineHeight = (line.bottomPt - line.topPt).coerceAtLeast(1f)
+            if (pageLines.isNotEmpty() && usedHeight + lineHeight > contentHeight) {
+                flush()
+            }
+            pageLines += line
+            usedHeight += lineHeight
+        }
+        if (pageLines.isNotEmpty()) flush()
+
+        return pages
+    }
+
+    fun createStaticLayout(
+        text: String,
+        paint: TextPaint,
+        width: Int,
+        alignment: TextAlignOption,
+        lineSpacingMultiplier: Float = 1.35f
+    ): StaticLayout {
+        val layoutAlignment = when (alignment) {
+            TextAlignOption.RIGHT, TextAlignOption.JUSTIFY -> Layout.Alignment.ALIGN_NORMAL
+            TextAlignOption.CENTER -> Layout.Alignment.ALIGN_CENTER
+            TextAlignOption.LEFT -> Layout.Alignment.ALIGN_OPPOSITE
+        }
+        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            StaticLayout.Builder.obtain(text, 0, text.length, paint, width.coerceAtLeast(1))
+                .setAlignment(layoutAlignment)
+                .setTextDirection(TextDirectionHeuristics.RTL)
+                .setLineSpacing(0f, lineSpacingMultiplier)
+                .setIncludePad(false)
+                .build()
+        } else {
+            @Suppress("DEPRECATION")
+            StaticLayout(
+                text, paint, width.coerceAtLeast(1), layoutAlignment,
+                lineSpacingMultiplier, 0f, false
+            )
+        }
+    }
+
+    fun createPageStaticLayout(
+        page: PageLayout,
+        typeface: Typeface,
+        fontSizePt: Float,
+        alignment: TextAlignOption
+    ): StaticLayout {
+        val paint = TextPaint().apply {
+            this.typeface = typeface
+            textSize = fontSizePt
+            isAntiAlias = true
+        }
+        return createStaticLayout(page.renderedText, paint, page.contentWidthPt.toInt(), alignment)
     }
 }

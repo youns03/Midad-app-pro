@@ -95,4 +95,39 @@ class KashidaEngineTest {
         assertTrue(layout.pages.first().lines.any { it.text.isEmpty() })
         assertEquals(1, layout.pageCount)
     }
+
+    @Test
+    fun shaping_preserves_rtl_combining_marks_and_mixed_content() {
+        val source = "مِداد عربي English 123"
+        val shaped = KashidaEngine.shapeLine(
+            source,
+            deficitPx = 200f,
+            level = KashidaLevel.HEAVY,
+            paint = paint
+        )
+
+        assertEquals(source, KashidaEngine.stripKashida(shaped))
+        assertTrue(shaped.contains("مِ"))
+        assertTrue(shaped.contains("English 123"))
+    }
+
+    @Test
+    fun layout_keeps_rendered_lines_within_content_width() {
+        val source = "كتب العربية الجميلة للاختبار"
+        val layout = DocumentLayoutEngine.build(
+            text = source,
+            typeface = Typeface.DEFAULT,
+            fontSizePt = 18f,
+            textAlign = TextAlignOption.JUSTIFY,
+            margins = PageMargins(20f, 20f, 20f, 20f, MarginUnit.MILLIMETER),
+            pageSize = PageSize.A4,
+            kashidaEnabled = true,
+            kashidaLevel = KashidaLevel.HEAVY
+        )
+
+        assertEquals(layout.pages.size, layout.pageCount)
+        assertTrue(layout.pages.all { page ->
+            page.lines.all { it.widthPt <= page.contentWidthPt + 0.5f }
+        })
+    }
 }

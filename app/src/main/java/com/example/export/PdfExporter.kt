@@ -2,7 +2,6 @@ package com.example.export
 
 import android.content.Context
 import android.content.Intent
-import android.graphics.Color as AndroidColor
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
@@ -35,19 +34,6 @@ object PdfExporter {
                 val canvas = page.canvas
                 canvas.drawRect(0f, 0f, pageLayout.widthPt, pageLayout.heightPt, bgPaint)
                 DocumentLayoutEngine.drawPage(canvas, pageLayout, typeface, fontSizePt, textColor)
-                if (layout.pageCount > 1) {
-                    val footerPaint = android.text.TextPaint().apply {
-                        setTypeface(Typeface.DEFAULT); textSize = 9f
-                        color = AndroidColor.argb(150, 90, 90, 90); isAntiAlias = true
-                        textAlign = Paint.Align.CENTER
-                    }
-                    canvas.drawText(
-                        "${pageLayout.index + 1} / ${layout.pageCount}",
-                        layout.pageWidthPt / 2f,
-                        layout.pageHeightPt - (layout.pageHeightPt - pageLayout.topMarginPt - pageLayout.contentHeightPt) / 2f,
-                        footerPaint
-                    )
-                }
                 pdfDocument.finishPage(page)
             }
             val exportsDir = File(context.cacheDir, "exports").apply { mkdirs() }

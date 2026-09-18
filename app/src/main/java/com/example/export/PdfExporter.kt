@@ -35,7 +35,7 @@ object PdfExporter {
                 val canvas = page.canvas
                 canvas.drawRect(0f, 0f, pageLayout.widthPt, pageLayout.heightPt, bgPaint)
                 val staticLayout = DocumentLayoutEngine.createPageStaticLayout(
-                    pageLayout, typeface, fontSizePt
+                    pageLayout, typeface, fontSizePt, textColor
                 )
                 canvas.save()
                 canvas.translate(pageLayout.leftMarginPt, pageLayout.topMarginPt)

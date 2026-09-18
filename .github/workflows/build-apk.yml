@@ -39,6 +39,22 @@ jobs:
           gradle-version: "9.3.1"
           cache-provider: basic
 
+      - name: Prepare stable development signing
+        if: ${{ secrets.DEV_KEYSTORE_BASE64 != '' }}
+        env:
+          DEV_KEYSTORE_BASE64: ${{ secrets.DEV_KEYSTORE_BASE64 }}
+          DEV_KEYSTORE_PASSWORD: ${{ secrets.DEV_KEYSTORE_PASSWORD }}
+          DEV_KEY_ALIAS: ${{ secrets.DEV_KEY_ALIAS }}
+          DEV_KEY_PASSWORD: ${{ secrets.DEV_KEY_PASSWORD }}
+        run: |
+          echo "$DEV_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/midad-dev-signing.jks"
+          {
+            echo "KEYSTORE_PATH=$RUNNER_TEMP/midad-dev-signing.jks"
+            echo "STORE_PASSWORD=$DEV_KEYSTORE_PASSWORD"
+            echo "KEY_ALIAS=$DEV_KEY_ALIAS"
+            echo "KEY_PASSWORD=$DEV_KEY_PASSWORD"
+          } >> "$GITHUB_ENV"
+
       - name: Verify build environment
         run: |
           java -version

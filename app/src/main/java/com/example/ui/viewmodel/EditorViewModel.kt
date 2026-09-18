@@ -2,6 +2,7 @@ package com.example.ui.viewmodel
 
 import android.app.Application
 import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.lifecycle.AndroidViewModel
@@ -28,6 +29,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.example.data.TextImportCodec
 
 enum class AppScreen {
     HOME,
@@ -541,6 +543,49 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                         exportMessage = "تعذر قراءة ملف الخط. يرجى التأكد من اختيار ملف .ttf أو .otf صالح."
                     )
                 }
+            }
+        }
+    }
+
+    /** Imports .txt/.md as editable UTF-8 text without applying Kashida. */
+    fun importTextDocument(uri: Uri) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isExporting = true, exportMessage = null) }
+            val result = runCatching {
+                val resolver = getApplication<Application>().contentResolver
+                val displayName = resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+                    ?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
+                val title = TextImportCodec.titleFromDisplayName(displayName)
+                val content = resolver.openInputStream(uri)?.use { input ->
+                    TextImportCodec.readUtf8(input)
+                } ?: error("تعذر فتح الملف")
+                title to content
+            }
+            result.onSuccess { (title, content) ->
+                val state = _uiState.value
+                val imported = DocumentEntity(
+                    title = title,
+                    content = content,
+                    fontId = state.selectedFont.id,
+                    fontSizePt = state.fontSizePt,
+                    textColorLong = state.textColor.value.toLong(),
+                    pageColorLong = state.pageColor.value.toLong(),
+                    textAlign = state.textAlign.name,
+                    marginTopMm = state.margins.topMm,
+                    marginBottomMm = state.margins.bottomMm,
+                    marginRightMm = state.margins.rightMm,
+                    marginLeftMm = state.margins.leftMm,
+                    marginUnit = state.margins.unit.name,
+                    paperSize = state.paperSize.name,
+                    kashidaEnabled = state.kashidaEnabled,
+                    kashidaLevel = state.kashidaLevel.name,
+                    updatedAt = System.currentTimeMillis()
+                )
+                val id = documentRepo.saveDocument(imported)
+                openDocument(id)
+                _uiState.update { it.copy(isExporting = false, exportMessage = "تم استيراد الملف كنص قابل للتحرير") }
+            }.onFailure {
+                _uiState.update { it.copy(isExporting = false, exportMessage = "تعذر قراءة الملف النصي UTF-8") }
             }
         }
     }

@@ -1,8 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item
-        android:width="66dp"
-        android:height="66dp"
-        android:drawable="@drawable/midad_app_icon_1789685180700"
-        android:gravity="center" />
-</layer-list>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Abstract single ink path: clear silhouette, centered within adaptive-icon safe area. -->
+    <path
+        android:fillColor="#FFF8EF"
+        android:fillType="evenOdd"
+        android:pathData="M22,66 C28,57 36,49 45,45 C54,41 63,43 70,49 C75,53 79,58 86,57 C81,64 75,69 67,70 C57,71 51,64 45,61 C39,58 33,61 28,68 C26,70 23,69 22,66 Z M34,66 C39,61 44,60 49,63 C56,69 62,76 72,75 C67,82 59,85 51,81 C45,78 40,71 34,70 Z" />
+    <path
+        android:fillColor="#FFF8EF"
+        android:pathData="M27,51 C34,43 42,37 52,35 C62,33 71,37 79,44 C71,41 64,41 58,44 C49,48 42,55 36,61 C32,64 28,62 27,58 C26,55 26,53 27,51 Z" />
+</vector>

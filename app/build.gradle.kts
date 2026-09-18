@@ -17,8 +17,8 @@ android {
     applicationId = "com.aistudio.kashidaeditor.artext"
     minSdk = 24
     targetSdk = 36
-    versionCode = 1
-    versionName = "1.0"
+    versionCode = 2
+    versionName = "1.1"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -31,6 +31,15 @@ android {
       keyAlias = "upload"
       keyPassword = System.getenv("KEY_PASSWORD")
     }
+    val ciKeystorePath = System.getenv("KEYSTORE_PATH")
+    if (!ciKeystorePath.isNullOrBlank()) {
+      create("ciDebug") {
+        storeFile = file(ciKeystorePath)
+        storePassword = System.getenv("STORE_PASSWORD")
+        keyAlias = System.getenv("KEY_ALIAS")
+        keyPassword = System.getenv("KEY_PASSWORD")
+      }
+    }
   }
 
   buildTypes {
@@ -40,7 +49,11 @@ android {
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
       signingConfig = signingConfigs.getByName("release")
     }
-    debug {}
+    debug {
+      if (!System.getenv("KEYSTORE_PATH").isNullOrBlank()) {
+        signingConfig = signingConfigs.getByName("ciDebug")
+      }
+    }
   }
   compileOptions {
     sourceCompatibility = JavaVersion.VERSION_11

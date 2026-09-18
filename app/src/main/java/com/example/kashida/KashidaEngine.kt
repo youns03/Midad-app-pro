@@ -317,7 +317,7 @@ object DocumentLayoutEngine {
     ): List<PageLayout> {
         if (lines.isEmpty()) {
             return listOf(
-                PageLayout(0, emptyList(), "", pageWidth, pageHeight, contentWidth, contentHeight, left, top, TextAlignOption.RIGHT)
+                PageLayout(0, emptyList(), "", pageWidth, pageHeight, contentWidth, contentHeight, left, top, alignment)
             )
         }
 

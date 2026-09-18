@@ -290,7 +290,8 @@ object DocumentLayoutEngine {
             contentWidth = contentWidth,
             contentHeight = contentHeight,
             left = left,
-            top = top
+            top = top,
+            alignment = textAlign
         )
 
         return DocumentLayout(
@@ -311,7 +312,8 @@ object DocumentLayoutEngine {
         contentWidth: Float,
         contentHeight: Float,
         left: Float,
-        top: Float
+        top: Float,
+        alignment: TextAlignOption
     ): List<PageLayout> {
         if (lines.isEmpty()) {
             return listOf(
@@ -342,7 +344,7 @@ object DocumentLayoutEngine {
                 contentHeightPt = contentHeight,
                 leftMarginPt = left,
                 topMarginPt = top,
-                alignment = textAlign
+                alignment = alignment
             )
             pageLines = mutableListOf()
             usedHeight = 0f

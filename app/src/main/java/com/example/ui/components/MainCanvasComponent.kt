@@ -179,7 +179,7 @@ fun ManualKashidaInteractiveView(
     fontSizePt: Float,
     textColor: Color,
     align: com.example.model.TextAlignOption,
-    onApplyKashida: (cleanWord: String, connectionIndex: Int, count: Int, wordIndex: Int) -> Unit,
+    onApplyKashida: (cleanWord: String, connectionIndex: Int, count: Int, wordStartIndex: Int) -> Unit,
     onExitManualMode: () -> Unit
 ) {
     val words = remember(text) { Regex("\\S+").findAll(text).map { it.value to it.range.first }.toList() }
@@ -233,7 +233,7 @@ fun ManualKashidaInteractiveView(
             },
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            words.forEachIndexed { wordIdx, (word, wordStartIndex) ->
+            words.forEachIndexed { wordIdx, (word, _) ->
                 val cleanWord = KashidaEngine.stripKashida(word)
                 val points = remember(cleanWord) { KashidaEngine.findConnectionPointsInWord(cleanWord) }
                 val isWordSelected = selectedWordIdx == wordIdx
@@ -377,7 +377,7 @@ fun ManualKashidaInteractiveView(
                                 value = tatweelSliderVal.toFloat(),
                                 onValueChange = {
                                     tatweelSliderVal = it.toInt()
-                                    onApplyKashida(cleanWord, point.indexInWord, tatweelSliderVal, selectedWordIdx!!)
+                                    onApplyKashida(cleanWord, point.indexInWord, tatweelSliderVal, words[selectedWordIdx!!].second)
                                 },
                                 valueRange = 0f..8f,
                                 steps = 7,

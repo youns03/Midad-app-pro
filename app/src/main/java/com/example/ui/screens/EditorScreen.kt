@@ -72,6 +72,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.export.PdfExporter
+import com.example.kashida.DocumentLayoutEngine
 import com.example.ui.components.MainCanvasComponent
 import com.example.ui.dialogs.PreviewExportDialog
 import com.example.ui.sheets.EditorBottomSheetsHost
@@ -89,6 +90,25 @@ fun EditorScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
+    val documentLayout = remember(
+        uiState.text,
+        uiState.selectedFont.id,
+        uiState.selectedFont.filePath,
+        uiState.fontSizePt,
+        uiState.textAlign,
+        uiState.margins,
+        uiState.paperSize,
+        uiState.kashidaEnabled,
+        uiState.kashidaLevel
+    ) {
+        viewModel.buildDocumentLayout(uiState)
+    }
+    val nativeTypeface = remember(uiState.selectedFont.id, uiState.selectedFont.filePath) {
+        viewModel.fontManager.getNativeTypeface(
+            uiState.selectedFont.id,
+            uiState.selectedFont.filePath
+        )
+    }
 
     val fontPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
@@ -306,7 +326,7 @@ fun EditorScreen(
                         )
 
                         Text(
-                            text = "صفحة ١ من ${uiState.estimatedPages} (${uiState.paperSize.name})",
+                            text = "صفحة ١ من ${documentLayout.pageCount} (${uiState.paperSize.name})",
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.Bold
@@ -328,6 +348,8 @@ fun EditorScreen(
             if (uiState.activeDialog == ActiveDialog.PREVIEW) {
                 PreviewExportDialog(
                     uiState = uiState,
+                    documentLayout = documentLayout,
+                    typeface = nativeTypeface,
                     onExportPdf = {
                         viewModel.exportPdf { uri ->
                             PdfExporter.shareFile(context, uri, "application/pdf", "مشاركة مستند PDF")

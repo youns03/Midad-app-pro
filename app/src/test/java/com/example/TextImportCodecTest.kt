@@ -4,6 +4,8 @@ import com.example.data.TextImportCodec
 import java.io.ByteArrayInputStream
 import java.nio.charset.StandardCharsets
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TextImportCodecTest {
@@ -39,5 +41,18 @@ class TextImportCodecTest {
     fun derives_document_title_without_changing_file_content() {
         assertEquals("مقال", TextImportCodec.titleFromDisplayName("مقال.md"))
         assertEquals("مستند مستورد", TextImportCodec.titleFromDisplayName(null))
+    }
+
+    @Test
+    fun accepts_only_txt_and_md_extensions_independent_of_case() {
+        assertTrue(TextImportCodec.isSupportedFileName("نص.TXT"))
+        assertTrue(TextImportCodec.isSupportedFileName("notes.md"))
+        assertFalse(TextImportCodec.isSupportedFileName("notes.pdf"))
+        assertFalse(TextImportCodec.isSupportedFileName("notes"))
+    }
+
+    @Test(expected = java.nio.charset.CharacterCodingException::class)
+    fun rejects_invalid_utf8_instead_of_silently_replacing_content() {
+        TextImportCodec.readUtf8(ByteArrayInputStream(byteArrayOf(0xC3.toByte(), 0x28)))
     }
 }

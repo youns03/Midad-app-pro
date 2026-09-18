@@ -11,6 +11,8 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      DEV_KEYSTORE_BASE64: ${{ secrets.DEV_KEYSTORE_BASE64 }}
 
     steps:
       - name: Checkout
@@ -40,9 +42,8 @@ jobs:
           cache-provider: basic
 
       - name: Prepare stable development signing
-        if: ${{ secrets.DEV_KEYSTORE_BASE64 != '' }}
+        if: ${{ env.DEV_KEYSTORE_BASE64 != '' }}
         env:
-          DEV_KEYSTORE_BASE64: ${{ secrets.DEV_KEYSTORE_BASE64 }}
           DEV_KEYSTORE_PASSWORD: ${{ secrets.DEV_KEYSTORE_PASSWORD }}
           DEV_KEY_ALIAS: ${{ secrets.DEV_KEY_ALIAS }}
           DEV_KEY_PASSWORD: ${{ secrets.DEV_KEY_PASSWORD }}

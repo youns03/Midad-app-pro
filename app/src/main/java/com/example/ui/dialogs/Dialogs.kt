@@ -512,7 +512,8 @@ private class DocumentPagePreviewView(context: android.content.Context) : View(c
         val layout = DocumentLayoutEngine.createPageStaticLayout(
             currentPage,
             typeface,
-            fontSizePt
+            fontSizePt,
+            textColor
         )
         val paint = Paint().apply {
             color = textColor

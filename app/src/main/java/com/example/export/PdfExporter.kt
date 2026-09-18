@@ -37,7 +37,7 @@ object PdfExporter {
                 DocumentLayoutEngine.drawPage(canvas, pageLayout, typeface, fontSizePt, textColor)
                 if (layout.pageCount > 1) {
                     val footerPaint = android.text.TextPaint().apply {
-                        typeface = Typeface.DEFAULT; textSize = 9f
+                        setTypeface(Typeface.DEFAULT); textSize = 9f
                         color = AndroidColor.argb(150, 90, 90, 90); isAntiAlias = true
                         textAlign = Paint.Align.CENTER
                     }

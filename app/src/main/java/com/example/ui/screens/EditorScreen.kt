@@ -294,7 +294,7 @@ fun EditorScreen(
                     )
                 }
 
-                // Floating Bottom Info Bar (Word/Char counter and estimated pages)
+                // Floating Bottom Info Bar (word/char counter and actual page count)
                 Card(
                     shape = RoundedCornerShape(20.dp),
                     colors = CardDefaults.cardColors(
@@ -357,7 +357,9 @@ fun EditorScreen(
                     },
                     onExportPng = {
                         viewModel.exportPng { uri ->
-                            PdfExporter.shareFile(context, uri, "image/png", "مشاركة صورة المستند PNG")
+                            val mimeType = if (documentLayout.pageCount > 1) "application/zip" else "image/png"
+                            val title = if (documentLayout.pageCount > 1) "مشاركة صفحات المستند PNG" else "مشاركة صورة المستند PNG"
+                            PdfExporter.shareFile(context, uri, mimeType, title)
                         }
                     },
                     onDismiss = { viewModel.dismissDialog() }

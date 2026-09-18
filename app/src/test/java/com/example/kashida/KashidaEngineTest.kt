@@ -76,4 +76,23 @@ class KashidaEngineTest {
             page.lines.zipWithNext().all { (a, b) -> b.topPt >= a.topPt }
         })
     }
+
+    @Test
+    fun layout_preserves_blank_lines_and_uses_point_margins() {
+        val layout = DocumentLayoutEngine.build(
+            text = "الأول\n\nالثالث",
+            typeface = Typeface.DEFAULT,
+            fontSizePt = 18f,
+            textAlign = TextAlignOption.RIGHT,
+            margins = PageMargins(25.4f, 25.4f, 25.4f, 25.4f, MarginUnit.MILLIMETER),
+            pageSize = PageSize.A4,
+            kashidaEnabled = false,
+            kashidaLevel = KashidaLevel.OFF
+        )
+
+        assertEquals(72f, layout.pages.first().leftMarginPt, 0.01f)
+        assertEquals(72f, layout.pages.first().topMarginPt, 0.01f)
+        assertTrue(layout.pages.first().lines.any { it.text.isEmpty() })
+        assertEquals(1, layout.pageCount)
+    }
 }

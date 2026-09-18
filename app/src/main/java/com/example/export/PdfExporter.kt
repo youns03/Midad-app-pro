@@ -34,13 +34,7 @@ object PdfExporter {
                 val page = pdfDocument.startPage(info)
                 val canvas = page.canvas
                 canvas.drawRect(0f, 0f, pageLayout.widthPt, pageLayout.heightPt, bgPaint)
-                val staticLayout = DocumentLayoutEngine.createPageStaticLayout(
-                    pageLayout, typeface, fontSizePt, textColor
-                )
-                canvas.save()
-                canvas.translate(pageLayout.leftMarginPt, pageLayout.topMarginPt)
-                staticLayout.draw(canvas)
-                canvas.restore()
+                DocumentLayoutEngine.drawPage(canvas, pageLayout, typeface, fontSizePt, textColor)
                 if (layout.pageCount > 1) {
                     val footerPaint = android.text.TextPaint().apply {
                         typeface = Typeface.DEFAULT; textSize = 9f
@@ -48,15 +42,17 @@ object PdfExporter {
                         textAlign = Paint.Align.CENTER
                     }
                     canvas.drawText(
-                        "" + (pageLayout.index + 1) + " / " + layout.pageCount + "", layout.pageWidthPt / 2f,
-                        layout.pageHeightPt - (pageLayout.topMarginPt / 2f), footerPaint
+                        "${pageLayout.index + 1} / ${layout.pageCount}",
+                        layout.pageWidthPt / 2f,
+                        layout.pageHeightPt - (layout.pageHeightPt - pageLayout.topMarginPt - pageLayout.contentHeightPt) / 2f,
+                        footerPaint
                     )
                 }
                 pdfDocument.finishPage(page)
             }
             val exportsDir = File(context.cacheDir, "exports").apply { mkdirs() }
             val sanitizedTitle = title.replace(Regex("[^a-zA-Z0-9\\u0600-\\u06FF_-]"), "_")
-            val pdfFile = File(exportsDir, "" + sanitizedTitle + "_" + System.currentTimeMillis() + ".pdf")
+            val pdfFile = File(exportsDir, "${sanitizedTitle}_${System.currentTimeMillis()}.pdf")
             FileOutputStream(pdfFile).use { pdfDocument.writeTo(it) }
             FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", pdfFile)
         } catch (e: Exception) { e.printStackTrace(); null } finally { pdfDocument.close() }

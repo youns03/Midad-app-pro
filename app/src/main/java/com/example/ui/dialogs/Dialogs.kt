@@ -507,20 +507,13 @@ private class DocumentPagePreviewView(context: android.content.Context) : View(c
         canvas.drawColor(pageColor)
         canvas.save()
         canvas.scale(scale, scale)
-        canvas.translate(currentPage.leftMarginPt, currentPage.topMarginPt)
 
-        val layout = DocumentLayoutEngine.createPageStaticLayout(
-            currentPage,
-            typeface,
-            fontSizePt,
-            textColor
-        )
         val paint = Paint().apply {
             color = textColor
             style = Paint.Style.STROKE
             isAntiAlias = true
         }
-        layout.draw(canvas)
+        DocumentLayoutEngine.drawPage(canvas, currentPage, typeface, fontSizePt, textColor)
         canvas.restore()
 
         paint.color = 0x22000000

@@ -244,6 +244,7 @@ object DocumentLayoutEngine {
         val paint = TextPaint().apply {
             this.typeface = typeface
             textSize = fontSizePt
+            color = textColor
             isAntiAlias = true
         }
         val baseLayout = createStaticLayout(text, paint, contentWidth.toInt(), textAlign, lineSpacingMultiplier)
@@ -394,7 +395,8 @@ object DocumentLayoutEngine {
     fun createPageStaticLayout(
         page: PageLayout,
         typeface: Typeface,
-        fontSizePt: Float
+        fontSizePt: Float,
+        textColor: Int = android.graphics.Color.BLACK
     ): StaticLayout {
         val paint = TextPaint().apply {
             this.typeface = typeface

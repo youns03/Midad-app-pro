@@ -6,12 +6,9 @@ import android.text.StaticLayout
 import android.text.TextDirectionHeuristics
 import android.text.TextPaint
 import com.example.model.KashidaLevel
-import com.example.model.MarginUnit
 import com.example.model.PageMargins
 import com.example.model.PageSize
 import com.example.model.TextAlignOption
-import kotlin.math.ceil
-import kotlin.math.max
 
 /**
  * Layout-time Arabic kashida shaping.
@@ -158,7 +155,6 @@ object KashidaEngine {
     ): String {
         val counts = insertions.copyOf()
         if (extraPoint != null) counts[extraPoint]++
-        val byOffset = points.associateBy { it.insertionIndex }
         val sb = StringBuilder(text.length + counts.sum())
         for (i in text.indices) {
             sb.append(text[i])
@@ -210,7 +206,8 @@ object DocumentLayoutEngine {
         val contentWidthPt: Float,
         val contentHeightPt: Float,
         val leftMarginPt: Float,
-        val topMarginPt: Float
+        val topMarginPt: Float,
+        val alignment: TextAlignOption
     )
 
     data class DocumentLayout(
@@ -318,7 +315,7 @@ object DocumentLayoutEngine {
     ): List<PageLayout> {
         if (lines.isEmpty()) {
             return listOf(
-                PageLayout(0, emptyList(), "", pageWidth, pageHeight, contentWidth, contentHeight, left, top)
+                PageLayout(0, emptyList(), "", pageWidth, pageHeight, contentWidth, contentHeight, left, top, TextAlignOption.RIGHT)
             )
         }
 
@@ -344,7 +341,8 @@ object DocumentLayoutEngine {
                 contentWidthPt = contentWidth,
                 contentHeightPt = contentHeight,
                 leftMarginPt = left,
-                topMarginPt = top
+                topMarginPt = top,
+                alignment = textAlign
             )
             pageLines = mutableListOf()
             usedHeight = 0f
@@ -394,14 +392,13 @@ object DocumentLayoutEngine {
     fun createPageStaticLayout(
         page: PageLayout,
         typeface: Typeface,
-        fontSizePt: Float,
-        alignment: TextAlignOption
+        fontSizePt: Float
     ): StaticLayout {
         val paint = TextPaint().apply {
             this.typeface = typeface
             textSize = fontSizePt
             isAntiAlias = true
         }
-        return createStaticLayout(page.renderedText, paint, page.contentWidthPt.toInt(), alignment)
+        return createStaticLayout(page.renderedText, paint, page.contentWidthPt.toInt(), page.alignment)
     }
 }

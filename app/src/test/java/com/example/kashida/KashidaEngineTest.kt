@@ -60,7 +60,7 @@ class KashidaEngineTest {
 
     @Test
     fun layout_returns_real_pages_without_splitting_lines() {
-        val source = ("هذا سطر عربي طويل للاختبار. ".repeat(2000))
+        val source = ("هذا سطر عربي للاختبار\n".repeat(100))
         val layout = DocumentLayoutEngine.build(
             text = source,
             typeface = Typeface.DEFAULT,

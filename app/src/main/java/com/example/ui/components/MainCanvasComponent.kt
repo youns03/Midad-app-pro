@@ -65,7 +65,7 @@ import com.example.ui.viewmodel.EditorUiState
 fun MainCanvasComponent(
     uiState: EditorUiState,
     onTextChanged: (String) -> Unit,
-    onApplyManualKashida: (cleanWord: String, connectionIndex: Int, count: Int, wordIndex: Int) -> Unit,
+    onApplyManualKashida: (cleanWord: String, connectionIndex: Int, count: Int, wordStartIndex: Int) -> Unit,
     onExitManualMode: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -182,7 +182,7 @@ fun ManualKashidaInteractiveView(
     onApplyKashida: (cleanWord: String, connectionIndex: Int, count: Int, wordIndex: Int) -> Unit,
     onExitManualMode: () -> Unit
 ) {
-    val words = remember(text) { text.split(" ") }
+    val words = remember(text) { Regex("\\S+").findAll(text).map { it.value to it.range.first }.toList() }
 
     var selectedWordIdx by remember { mutableStateOf<Int?>(null) }
     var selectedPointIdx by remember { mutableStateOf<Int?>(null) }
@@ -233,7 +233,7 @@ fun ManualKashidaInteractiveView(
             },
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            words.forEachIndexed { wordIdx, word ->
+            words.forEachIndexed { wordIdx, (word, wordStartIndex) ->
                 val cleanWord = KashidaEngine.stripKashida(word)
                 val points = remember(cleanWord) { KashidaEngine.findConnectionPointsInWord(cleanWord) }
                 val isWordSelected = selectedWordIdx == wordIdx
@@ -290,7 +290,7 @@ fun ManualKashidaInteractiveView(
 
         // Live Inspector & Slider for Selected Point
         if (selectedWordIdx != null && selectedPointIdx != null && selectedWordIdx!! in words.indices) {
-            val curWord = words[selectedWordIdx!!]
+            val curWord = words[selectedWordIdx!!].first
             val cleanWord = KashidaEngine.stripKashida(curWord)
             val points = KashidaEngine.findConnectionPointsInWord(cleanWord)
 
@@ -366,7 +366,7 @@ fun ManualKashidaInteractiveView(
                                 onClick = {
                                     if (tatweelSliderVal > 0) {
                                         tatweelSliderVal--
-                                        onApplyKashida(cleanWord, point.indexInWord, tatweelSliderVal, selectedWordIdx!!)
+                                        onApplyKashida(cleanWord, point.indexInWord, tatweelSliderVal, words[selectedWordIdx!!].second)
                                     }
                                 }
                             ) {

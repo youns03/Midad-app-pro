@@ -12,6 +12,7 @@ import com.example.data.DocumentRepository
 import com.example.data.FontManager
 import com.example.export.ImageExporter
 import com.example.export.PdfExporter
+import com.example.kashida.DocumentLayoutEngine
 import com.example.kashida.KashidaEngine
 import com.example.model.DocumentTemplate
 import com.example.model.FontItem
@@ -97,8 +98,6 @@ data class EditorUiState(
     val charCount: Int
         get() = text.length
 
-    val estimatedPages: Int
-        get() = ((text.length / 1200) + 1).coerceAtLeast(1)
 }
 
 class EditorViewModel(application: Application) : AndroidViewModel(application) {
@@ -410,10 +409,12 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         triggerAutoSave()
     }
 
+    /**
+     * Automatic kashida is a render-time transformation and never mutates
+     * the document text.
+     */
     fun applySmartKashidaToDocument() {
-        val level = if (_uiState.value.kashidaEnabled) _uiState.value.kashidaLevel else KashidaLevel.OFF
-        val updatedText = KashidaEngine.applySmartKashida(_uiState.value.text, level)
-        onTextChanged(updatedText)
+        _uiState.update { it.copy(exportMessage = "الكشيدة التلقائية تُطبّق أثناء التنضيد دون تعديل النص الأصلي") }
     }
 
     fun toggleManualKashidaMode() {
@@ -421,13 +422,47 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         _uiState.update { it.copy(manualKashidaMode = !current, activeSheet = ActiveSheet.NONE) }
     }
 
-    fun applyManualKashidaAtPoint(cleanWord: String, connectionIndex: Int, count: Int, wordIndexInText: Int) {
-        val words = _uiState.value.text.split(" ").toMutableList()
-        if (wordIndexInText in words.indices) {
-            words[wordIndexInText] = KashidaEngine.applyManualKashidaToWord(cleanWord, connectionIndex, count)
-            val newText = words.joinToString(" ")
-            onTextChanged(newText)
+    fun applyManualKashidaAtPoint(
+        cleanWord: String,
+        connectionIndex: Int,
+        count: Int,
+        wordStartIndex: Int
+    ) {
+        val currentText = _uiState.value.text
+        if (wordStartIndex !in currentText.indices) return
+
+        var wordEnd = wordStartIndex
+        while (wordEnd < currentText.length && !currentText[wordEnd].isWhitespace()) {
+            wordEnd++
         }
+
+        val currentWord = currentText.substring(wordStartIndex, wordEnd)
+        val cleanCurrentWord = KashidaEngine.stripKashida(currentWord)
+        if (cleanCurrentWord != cleanWord) return
+
+        val replacement = KashidaEngine.applyManualKashidaToWord(
+            cleanCurrentWord,
+            connectionIndex,
+            count
+        )
+        onTextChanged(currentText.replaceRange(wordStartIndex, wordEnd, replacement))
+    }
+
+    fun buildDocumentLayout(state: EditorUiState = _uiState.value): DocumentLayoutEngine.DocumentLayout {
+        val typeface = fontManager.getNativeTypeface(
+            state.selectedFont.id,
+            state.selectedFont.filePath
+        )
+        return DocumentLayoutEngine.build(
+            text = state.text,
+            typeface = typeface,
+            fontSizePt = state.fontSizePt,
+            textAlign = state.textAlign,
+            margins = state.margins,
+            pageSize = state.paperSize,
+            kashidaEnabled = state.kashidaEnabled,
+            kashidaLevel = state.kashidaLevel
+        )
     }
 
     // --- Sheets & Dialogs ---
@@ -542,24 +577,17 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             _uiState.update { it.copy(isExporting = true, exportMessage = null) }
             val state = _uiState.value
-            val textToRender = if (state.kashidaEnabled && state.textAlign == TextAlignOption.JUSTIFY) {
-                KashidaEngine.applySmartKashida(state.text, state.kashidaLevel)
-            } else {
-                state.text
-            }
+            val layout = buildDocumentLayout(state)
             val nativeTypeface = fontManager.getNativeTypeface(state.selectedFont.id, state.selectedFont.filePath)
 
             val uri = PdfExporter.exportToPdf(
                 context = getApplication(),
-                text = textToRender,
+                layout = layout,
                 title = state.title,
                 typeface = nativeTypeface,
                 fontSizePt = state.fontSizePt,
                 textColor = state.textColor.toArgb(),
-                pageColor = state.pageColor.toArgb(),
-                textAlign = state.textAlign,
-                margins = state.margins,
-                pageSize = state.paperSize
+                pageColor = state.pageColor.toArgb()
             )
 
             _uiState.update {
@@ -577,24 +605,17 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             _uiState.update { it.copy(isExporting = true, exportMessage = null) }
             val state = _uiState.value
-            val textToRender = if (state.kashidaEnabled && state.textAlign == TextAlignOption.JUSTIFY) {
-                KashidaEngine.applySmartKashida(state.text, state.kashidaLevel)
-            } else {
-                state.text
-            }
+            val layout = buildDocumentLayout(state)
             val nativeTypeface = fontManager.getNativeTypeface(state.selectedFont.id, state.selectedFont.filePath)
 
             val uri = ImageExporter.exportToPng(
                 context = getApplication(),
-                text = textToRender,
+                layout = layout,
                 title = state.title,
                 typeface = nativeTypeface,
                 fontSizePt = state.fontSizePt,
                 textColor = state.textColor.toArgb(),
-                pageColor = state.pageColor.toArgb(),
-                textAlign = state.textAlign,
-                margins = state.margins,
-                pageSize = state.paperSize
+                pageColor = state.pageColor.toArgb()
             )
 
             _uiState.update {

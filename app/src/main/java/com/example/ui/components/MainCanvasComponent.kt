@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -71,13 +72,6 @@ fun MainCanvasComponent(
 ) {
     val scrollState = rememberScrollState()
 
-    // Margin padding simulation relative to screen scale
-    // Normalizing 20mm to ~16-24dp for comfortable mobile viewport
-    val topPaddingDp = (uiState.margins.topMm * 0.8f).coerceIn(8f, 48f).dp
-    val bottomPaddingDp = (uiState.margins.bottomMm * 0.8f).coerceIn(8f, 48f).dp
-    val rightPaddingDp = (uiState.margins.rightMm * 0.8f).coerceIn(8f, 48f).dp
-    val leftPaddingDp = (uiState.margins.leftMm * 0.8f).coerceIn(8f, 48f).dp
-
     val aspectRatio = uiState.paperSize.widthMm / uiState.paperSize.heightMm
 
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
@@ -107,16 +101,23 @@ fun MainCanvasComponent(
                         .aspectRatio(aspectRatio)
                         .testTag("document_paper_sheet")
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(
-                                top = topPaddingDp,
-                                bottom = bottomPaddingDp,
-                                end = leftPaddingDp,
-                                start = rightPaddingDp
-                            )
-                    ) {
+                    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                        val mmToDp = maxWidth.value / uiState.paperSize.widthMm
+                        val topPaddingDp = (uiState.margins.topMm * mmToDp).dp
+                        val bottomPaddingDp = (uiState.margins.bottomMm * mmToDp).dp
+                        val rightPaddingDp = (uiState.margins.rightMm * mmToDp).dp
+                        val leftPaddingDp = (uiState.margins.leftMm * mmToDp).dp
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(
+                                    top = topPaddingDp,
+                                    bottom = bottomPaddingDp,
+                                    end = leftPaddingDp,
+                                    start = rightPaddingDp
+                                )
+                        ) {
                         // Visual margin guideline (faint border showing printable area)
                         Box(
                             modifier = Modifier
@@ -157,6 +158,7 @@ fun MainCanvasComponent(
                                         .testTag("document_text_field")
                                 )
                             }
+                        }
                         }
                     }
                 }

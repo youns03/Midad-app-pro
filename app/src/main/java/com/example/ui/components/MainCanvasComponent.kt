@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -59,6 +60,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.kashida.KashidaEngine
+import com.example.layout.DocumentUnits
 import com.example.ui.viewmodel.EditorUiState
 
 @Composable
@@ -70,13 +72,6 @@ fun MainCanvasComponent(
     modifier: Modifier = Modifier
 ) {
     val scrollState = rememberScrollState()
-
-    // Margin padding simulation relative to screen scale
-    // Normalizing 20mm to ~16-24dp for comfortable mobile viewport
-    val topPaddingDp = (uiState.margins.topMm * 0.8f).coerceIn(8f, 48f).dp
-    val bottomPaddingDp = (uiState.margins.bottomMm * 0.8f).coerceIn(8f, 48f).dp
-    val rightPaddingDp = (uiState.margins.rightMm * 0.8f).coerceIn(8f, 48f).dp
-    val leftPaddingDp = (uiState.margins.leftMm * 0.8f).coerceIn(8f, 48f).dp
 
     val aspectRatio = uiState.paperSize.widthMm / uiState.paperSize.heightMm
 
@@ -93,30 +88,43 @@ fun MainCanvasComponent(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.widthIn(max = 680.dp)
             ) {
-                // Realistic Paper Sheet Container
-                Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = uiState.pageColor,
-                    shadowElevation = 8.dp,
-                    border = androidx.compose.foundation.BorderStroke(
-                        1.dp,
-                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                    ),
+                // Realistic Paper Sheet Container with exact proportional margins
+                BoxWithConstraints(
                     modifier = Modifier
                         .fillMaxWidth()
                         .aspectRatio(aspectRatio)
-                        .testTag("document_paper_sheet")
                 ) {
-                    Box(
+                    val sheetWidthDp = maxWidth.value
+                    val paperWidthDp = DocumentUnits.mmToDp(uiState.paperSize.widthMm)
+                    val scale = if (paperWidthDp > 0f) sheetWidthDp / paperWidthDp else 1f
+
+                    val topPaddingDp = (DocumentUnits.mmToDp(uiState.margins.topMm) * scale).dp
+                    val bottomPaddingDp = (DocumentUnits.mmToDp(uiState.margins.bottomMm) * scale).dp
+                    val rightPaddingDp = (DocumentUnits.mmToDp(uiState.margins.rightMm) * scale).dp
+                    val leftPaddingDp = (DocumentUnits.mmToDp(uiState.margins.leftMm) * scale).dp
+
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = uiState.pageColor,
+                        shadowElevation = 8.dp,
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                        ),
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(
-                                top = topPaddingDp,
-                                bottom = bottomPaddingDp,
-                                end = leftPaddingDp,
-                                start = rightPaddingDp
-                            )
+                            .testTag("document_paper_sheet")
                     ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(
+                                    top = topPaddingDp,
+                                    bottom = bottomPaddingDp,
+                                    end = leftPaddingDp,
+                                    start = rightPaddingDp
+                                )
+                        ) {
                         // Visual margin guideline (faint border showing printable area)
                         Box(
                             modifier = Modifier
@@ -160,8 +168,9 @@ fun MainCanvasComponent(
                         }
                     }
                 }
+            }
 
-                Spacer(modifier = Modifier.height(30.dp))
+            Spacer(modifier = Modifier.height(30.dp))
             }
         }
     }

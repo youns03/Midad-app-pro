@@ -51,6 +51,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -91,6 +92,7 @@ fun HomeScreen(
     viewModel: EditorViewModel,
     uiState: EditorUiState,
     onImportFontClick: () -> Unit,
+    onImportDocumentClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -135,6 +137,12 @@ fun HomeScreen(
                     },
                     actions = {
                         if (!isSearchActive && uiState.selectedHomeTab == HomeTab.DOCUMENTS) {
+                            IconButton(
+                                onClick = onImportDocumentClick,
+                                modifier = Modifier.testTag("home_import_doc_btn")
+                            ) {
+                                Icon(Icons.Outlined.FileUpload, contentDescription = "استيراد مستند نصي (TXT / MD)")
+                            }
                             IconButton(onClick = { isSearchActive = true }) {
                                 Icon(Icons.Outlined.Search, contentDescription = "بحث")
                             }
@@ -217,7 +225,8 @@ fun HomeScreen(
                                 PdfExporter.shareFile(context, uri, "application/pdf", "مشاركة مستند PDF")
                             }
                         },
-                        onCreateNew = { viewModel.createNewDocument() }
+                        onCreateNew = { viewModel.createNewDocument() },
+                        onImportDocument = onImportDocumentClick
                     )
 
                     HomeTab.TEMPLATES -> TemplatesTabContent(
@@ -254,7 +263,8 @@ fun DocumentsTabContent(
     onDuplicate: (DocumentEntity) -> Unit,
     onDelete: (DocumentEntity) -> Unit,
     onShare: (DocumentEntity) -> Unit,
-    onCreateNew: () -> Unit
+    onCreateNew: () -> Unit,
+    onImportDocument: () -> Unit
 ) {
     if (documents.isEmpty()) {
         Box(
@@ -287,18 +297,32 @@ fun DocumentsTabContent(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "ابدأ بإنشاء مستندك الأول المنسق بأصول الخط العربي",
+                    text = "ابدأ بإنشاء مستند جديد أو استورد ملف نصي من جهازك",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.outline
                 )
                 Spacer(modifier = Modifier.height(6.dp))
-                FilledTonalButton(
-                    onClick = onCreateNew,
-                    shape = RoundedCornerShape(12.dp)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("إنشاء مستند جديد")
+                    FilledTonalButton(
+                        onClick = onCreateNew,
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("مستند جديد")
+                    }
+                    OutlinedButton(
+                        onClick = onImportDocument,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.testTag("empty_import_doc_btn")
+                    ) {
+                        Icon(Icons.Outlined.FileUpload, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("استيراد TXT/MD")
+                    }
                 }
             }
         }

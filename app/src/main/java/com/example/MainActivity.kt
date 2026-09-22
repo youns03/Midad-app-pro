@@ -42,6 +42,14 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
+            val documentPickerLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.OpenDocument()
+            ) { uri ->
+                if (uri != null) {
+                    editorViewModel.importTextDocument(uri)
+                }
+            }
+
             MyApplicationTheme(darkTheme = isDark) {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     when (uiState.currentScreen) {
@@ -51,6 +59,11 @@ class MainActivity : ComponentActivity() {
                             onImportFontClick = {
                                 fontPickerLauncher.launch(
                                     arrayOf("font/*", "application/x-font-ttf", "application/x-font-otf", "*/*")
+                                )
+                            },
+                            onImportDocumentClick = {
+                                documentPickerLauncher.launch(
+                                    arrayOf("text/plain", "text/markdown", "text/*", "*/*")
                                 )
                             }
                         )

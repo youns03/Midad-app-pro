@@ -24,12 +24,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.FontDownload
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -41,6 +43,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
@@ -59,6 +62,7 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.view.View
+import com.example.export.PreflightEngine
 import com.example.kashida.DocumentLayoutEngine
 import com.example.model.DocumentTemplate
 import com.example.model.FontItem
@@ -401,6 +405,16 @@ fun PreviewExportDialog(
                         .fillMaxSize()
                         .padding(16.dp)
                 ) {
+                    val preflightReport = remember(documentLayout, typeface, uiState.fontSizePt, uiState.paperSize, uiState.margins) {
+                        PreflightEngine.inspect(
+                            layout = documentLayout,
+                            typeface = typeface,
+                            fontSizePt = uiState.fontSizePt,
+                            pageSize = uiState.paperSize,
+                            margins = uiState.margins
+                        )
+                    }
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -423,7 +437,58 @@ fun PreviewExportDialog(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Preflight Quality & Safety Banner
+                    Card(
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (preflightReport.isReadyForExport) {
+                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+                            } else {
+                                MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)
+                            }
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("preflight_status_card")
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = if (preflightReport.isReadyForExport) Icons.Default.CheckCircle else Icons.Default.Warning,
+                                    contentDescription = null,
+                                    tint = if (preflightReport.isReadyForExport) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = if (preflightReport.isReadyForExport) "فحص الجاهزية للطباعة (Preflight: سليم)" else "فحص ما قبل التصدير: تنبيهات",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    color = if (preflightReport.isReadyForExport) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = preflightReport.summaryAr,
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            if (preflightReport.diagnostics.isNotEmpty() && !preflightReport.isReadyForExport) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                preflightReport.diagnostics.take(3).forEach { diag ->
+                                    Text(
+                                        text = "• ${diag.title}: ${diag.description}",
+                                        fontSize = 10.sp,
+                                        color = MaterialTheme.colorScheme.error
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
 
                     LazyColumn(
                         modifier = Modifier

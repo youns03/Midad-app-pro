@@ -10,6 +10,8 @@ import com.example.data.AppDatabase
 import com.example.data.DocumentEntity
 import com.example.data.DocumentRepository
 import com.example.data.FontManager
+import com.example.data.ImportDocumentOutcome
+import com.example.data.TextDocumentImporter
 import com.example.export.ImageExporter
 import com.example.export.PdfExporter
 import com.example.kashida.DocumentLayoutEngine
@@ -540,6 +542,53 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                         isExporting = false,
                         exportMessage = "تعذر قراءة ملف الخط. يرجى التأكد من اختيار ملف .ttf أو .otf صالح."
                     )
+                }
+            }
+        }
+    }
+
+    fun importTextDocument(uri: Uri) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isExporting = true, exportMessage = "جاري قراءة واستيراد المستند النصي...") }
+            val outcome = TextDocumentImporter.importFromUri(getApplication(), uri)
+            when (outcome) {
+                is ImportDocumentOutcome.Success -> {
+                    val imported = outcome.document
+                    val defaultFont = _uiState.value.availableFonts.firstOrNull() ?: fontManager.bundledFonts.first()
+                    val newDoc = DocumentEntity(
+                        title = imported.title,
+                        content = imported.content,
+                        fontId = defaultFont.id,
+                        fontSizePt = 18f,
+                        textColorLong = Color(0xFF1E293B).value.toLong(),
+                        pageColorLong = Color(0xFFFFFFFF).value.toLong(),
+                        textAlign = TextAlignOption.JUSTIFY.name,
+                        marginTopMm = 20f,
+                        marginBottomMm = 20f,
+                        marginRightMm = 20f,
+                        marginLeftMm = 20f,
+                        marginUnit = MarginUnit.MILLIMETER.name,
+                        paperSize = PageSize.A4.name,
+                        kashidaEnabled = true,
+                        kashidaLevel = KashidaLevel.MEDIUM.name,
+                        updatedAt = System.currentTimeMillis()
+                    )
+                    val generatedId = documentRepo.saveDocument(newDoc)
+                    openDocument(generatedId)
+                    _uiState.update {
+                        it.copy(
+                            isExporting = false,
+                            exportMessage = "تم استيراد المستند بنجاح: ${imported.title}"
+                        )
+                    }
+                }
+                is ImportDocumentOutcome.Error -> {
+                    _uiState.update {
+                        it.copy(
+                            isExporting = false,
+                            exportMessage = outcome.message
+                        )
+                    }
                 }
             }
         }

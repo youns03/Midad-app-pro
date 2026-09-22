@@ -135,4 +135,64 @@ class KashidaEngineTest {
             page.lines.all { it.widthPt <= page.contentWidthPt + 0.5f }
         })
     }
+
+    @Test
+    fun manual_tatweel_preserved_when_auto_kashida_runs() {
+        val manualWord = "كـــتاب جميل"
+        // 3 tatweels manually placed by the user
+        assertEquals(3, manualWord.count { it == KashidaEngine.TATWEEL })
+
+        // When auto kashida runs with deficit:
+        val shaped = KashidaEngine.shapeLine(
+            line = manualWord,
+            deficitPx = 50f,
+            level = KashidaLevel.MEDIUM,
+            paint = paint
+        )
+
+        // The shaped line must NEVER lose the original 3 tatweels
+        assertTrue(
+            "Manual tatweels must never be wiped out, found ${shaped.count { it == KashidaEngine.TATWEEL }}",
+            shaped.count { it == KashidaEngine.TATWEEL } >= 3
+        )
+        // Base text stripped of tatweel must match
+        assertEquals("كتاب جميل", KashidaEngine.stripKashida(shaped))
+
+        // When deficit is 0 or kashida is off:
+        val noDeficit = KashidaEngine.shapeLine(manualWord, 0f, KashidaLevel.MEDIUM, paint)
+        assertEquals(manualWord, noDeficit)
+
+        val kashidaOff = KashidaEngine.shapeLine(manualWord, 50f, KashidaLevel.OFF, paint)
+        assertEquals(manualWord, kashidaOff)
+    }
+
+    @Test
+    fun overflow_detection_diagnoses_unbroken_long_token() {
+        // When margins leave an extremely narrow content width (e.g. ~5.6pt on A5 with 73mm right & left margins),
+        // words at 24pt font size will strictly exceed printable line width and trigger horizontal overflow
+        val token = "المستند العربي المعاصر"
+        val layout = DocumentLayoutEngine.build(
+            text = token,
+            typeface = Typeface.DEFAULT,
+            fontSizePt = 24f,
+            textAlign = TextAlignOption.RIGHT,
+            margins = PageMargins(
+                topMm = 20f,
+                bottomMm = 20f,
+                rightMm = 73f,
+                leftMm = 73f,
+                unit = MarginUnit.MILLIMETER
+            ),
+            pageSize = PageSize.A5,
+            kashidaEnabled = false,
+            kashidaLevel = KashidaLevel.OFF
+        )
+
+        assertTrue("Layout must report overflow issue for narrow content width", layout.hasOverflow)
+        assertTrue("Issues must contain HORIZONTAL_OVERFLOW", layout.issues.any {
+            it.issueType == DocumentLayoutEngine.LayoutIssue.IssueType.HORIZONTAL_OVERFLOW
+        })
+        val issue = layout.issues.first { it.issueType == DocumentLayoutEngine.LayoutIssue.IssueType.HORIZONTAL_OVERFLOW }
+        assertTrue("Overflow amount must be positive", issue.overflowAmountPt > 0f)
+    }
 }

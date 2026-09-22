@@ -59,50 +59,65 @@ object KashidaEngine {
      * Diacritics attached to the first letter remain before the inserted
      * tatweel, so tashkeel is never displaced.
      */
-    fun findConnectionPointsInWord(word: String): List<ConnectionPoint> {
-        val cleanWord = stripKashida(word)
-        if (cleanWord.length < 2) return emptyList()
+    fun findConnectionPointsInLine(text: String): List<ConnectionPoint> {
+        if (text.length < 2) return emptyList()
 
         val points = mutableListOf<ConnectionPoint>()
         var i = 0
-        while (i < cleanWord.length) {
-            val first = cleanWord[i]
-            if (!isArabicLetter(first)) {
+        while (i < text.length) {
+            val first = text[i]
+            if (!isArabicLetter(first) || first == TATWEEL) {
                 i++
                 continue
             }
 
-            var insertion = i + 1
-            while (insertion < cleanWord.length && isDiacritic(cleanWord[insertion])) {
-                insertion++
+            // Skip any diacritics attached to the first letter
+            var scan = i + 1
+            while (scan < text.length && isDiacritic(text[scan])) {
+                scan++
             }
 
-            if (insertion < cleanWord.length) {
-                val second = cleanWord[insertion]
-                if (canConnectForward(first, second)) {
-                    var score = 1
-                    if (second !in NON_CONNECTING_FORWARD) score += 1
-                    if (first in setOf('س', 'ش', 'ص', 'ض', 'ط', 'ظ')) score += 2
-                    if (first in setOf('ب', 'ت', 'ث', 'ن', 'ي', 'ئ')) score += 1
-                    if (first in setOf('ف', 'ق')) score += 1
-                    points += ConnectionPoint(
-                        indexInWord = i,
-                        firstChar = first,
-                        secondChar = second,
-                        insertionIndex = insertion,
-                        aestheticScore = score
-                    )
+            // Skip any existing tatweels (preserving manual kashida)
+            while (scan < text.length && (text[scan] == TATWEEL || isDiacritic(text[scan]))) {
+                scan++
+            }
+
+            val insertionPoint = scan
+
+            if (scan < text.length) {
+                val second = text[scan]
+                if (isArabicLetter(second) && second != TATWEEL) {
+                    if (canConnectForward(first, second)) {
+                        var score = 1
+                        if (second !in NON_CONNECTING_FORWARD) score += 1
+                        if (first in setOf('س', 'ش', 'ص', 'ض', 'ط', 'ظ')) score += 2
+                        if (first in setOf('ب', 'ت', 'ث', 'ن', 'ي', 'ئ')) score += 1
+                        if (first in setOf('ف', 'ق')) score += 1
+                        points += ConnectionPoint(
+                            indexInWord = i,
+                            firstChar = first,
+                            secondChar = second,
+                            insertionIndex = insertionPoint,
+                            aestheticScore = score
+                        )
+                    }
                 }
             }
-            i = insertion
+            i = scan
         }
         return points
+    }
+
+    fun findConnectionPointsInWord(word: String): List<ConnectionPoint> {
+        return findConnectionPointsInLine(word)
     }
 
     /**
      * Shapes one already-wrapped line to consume as much of [deficitPx] as
      * possible without changing its line break. The original line remains
      * untouched; the returned value is render-only.
+     *
+     * Crucially: existing manual tatweels in [line] are NEVER stripped.
      */
     fun shapeLine(
         line: String,
@@ -112,9 +127,8 @@ object KashidaEngine {
     ): String {
         if (level == KashidaLevel.OFF || deficitPx <= 0f || line.isBlank()) return line
 
-        val clean = stripKashida(line)
-        val points = findConnectionPointsInWord(clean)
-        if (points.isEmpty()) return clean
+        val points = findConnectionPointsInLine(line)
+        if (points.isEmpty()) return line
 
         val insertions = IntArray(points.size)
         val maxPerPoint = when (level) {
@@ -131,8 +145,8 @@ object KashidaEngine {
             val ordered = points.indices.sortedByDescending { points[it].aestheticScore }
             for (pointIndex in ordered) {
                 if (insertions[pointIndex] >= maxPerPoint) continue
-                val candidate = buildWithInsertions(clean, points, insertions, pointIndex)
-                val widthBefore = paint.measureText(buildWithInsertions(clean, points, insertions))
+                val candidate = buildWithInsertions(line, points, insertions, pointIndex)
+                val widthBefore = paint.measureText(buildWithInsertions(line, points, insertions))
                 val widthAfter = paint.measureText(candidate)
                 val delta = widthAfter - widthBefore
                 if (delta > 0f && delta <= remaining + 0.01f) {
@@ -144,7 +158,7 @@ object KashidaEngine {
             }
         }
 
-        return buildWithInsertions(clean, points, insertions)
+        return buildWithInsertions(line, points, insertions)
     }
 
     private fun buildWithInsertions(
@@ -155,7 +169,10 @@ object KashidaEngine {
     ): String {
         val counts = insertions.copyOf()
         if (extraPoint != null) counts[extraPoint]++
-        val sb = StringBuilder(text.length + counts.sum())
+        val totalExtra = counts.sum()
+        if (totalExtra == 0) return text
+
+        val sb = StringBuilder(text.length + totalExtra)
         for (i in text.indices) {
             sb.append(text[i])
             val pointIndex = points.indexOfFirst { it.insertionIndex == i + 1 }
@@ -171,7 +188,7 @@ object KashidaEngine {
     ): String {
         if (connectionIndex !in cleanWord.indices) return cleanWord
         val count = tatweelCount.coerceIn(0, 10)
-        val points = findConnectionPointsInWord(cleanWord)
+        val points = findConnectionPointsInLine(cleanWord)
         val point = points.firstOrNull { it.indexInWord == connectionIndex }
             ?: return cleanWord
         return cleanWord.substring(0, point.insertionIndex) +
@@ -186,6 +203,21 @@ object KashidaEngine {
  */
 object DocumentLayoutEngine {
 
+    data class LayoutIssue(
+        val pageIndex: Int,
+        val lineIndexOnPage: Int,
+        val issueType: IssueType,
+        val message: String,
+        val overflowAmountPt: Float = 0f
+    ) {
+        enum class IssueType {
+            HORIZONTAL_OVERFLOW,
+            VERTICAL_PAGE_OVERFLOW,
+            SUSPICIOUS_GEOMETRY,
+            INVALID_LINE
+        }
+    }
+
     data class LayoutLine(
         val rawStart: Int,
         val rawEnd: Int,
@@ -194,7 +226,9 @@ object DocumentLayoutEngine {
         val bottomPt: Float,
         val baselinePt: Float,
         val widthPt: Float,
-        val paragraphEnd: Boolean
+        val paragraphEnd: Boolean,
+        val isOverflowing: Boolean = false,
+        val overflowAmountPt: Float = 0f
     )
 
     data class PageLayout(
@@ -207,8 +241,14 @@ object DocumentLayoutEngine {
         val contentHeightPt: Float,
         val leftMarginPt: Float,
         val topMarginPt: Float,
-        val alignment: TextAlignOption
-    )
+        val alignment: TextAlignOption,
+        val issues: List<LayoutIssue> = emptyList()
+    ) {
+        val hasOverflow: Boolean get() = issues.any {
+            it.issueType == LayoutIssue.IssueType.HORIZONTAL_OVERFLOW ||
+            it.issueType == LayoutIssue.IssueType.VERTICAL_PAGE_OVERFLOW
+        }
+    }
 
     data class DocumentLayout(
         val pages: List<PageLayout>,
@@ -216,9 +256,15 @@ object DocumentLayoutEngine {
         val pageHeightPt: Float,
         val contentWidthPt: Float,
         val contentHeightPt: Float,
-        val rawText: String
+        val rawText: String,
+        val issues: List<LayoutIssue> = emptyList()
     ) {
         val pageCount: Int get() = pages.size
+        val hasOverflow: Boolean get() = issues.any {
+            it.issueType == LayoutIssue.IssueType.HORIZONTAL_OVERFLOW ||
+            it.issueType == LayoutIssue.IssueType.VERTICAL_PAGE_OVERFLOW
+        }
+        val totalIssuesCount: Int get() = issues.size
     }
 
     fun build(
@@ -270,6 +316,9 @@ object DocumentLayoutEngine {
                 )
             } else rawLine
             val width = paint.measureText(rendered)
+            val overflowAmount = (width - contentWidth).coerceAtLeast(0f)
+            val isOverflowing = overflowAmount > 0.5f
+
             lines += LayoutLine(
                 rawStart = rawStart,
                 rawEnd = rawEnd,
@@ -278,7 +327,9 @@ object DocumentLayoutEngine {
                 bottomPt = baseLayout.getLineBottom(i).toFloat(),
                 baselinePt = baseLayout.getLineBaseline(i).toFloat(),
                 widthPt = width,
-                paragraphEnd = hasParagraphBreak
+                paragraphEnd = hasParagraphBreak,
+                isOverflowing = isOverflowing,
+                overflowAmountPt = overflowAmount
             )
         }
 
@@ -294,13 +345,16 @@ object DocumentLayoutEngine {
             alignment = textAlign
         )
 
+        val allIssues = pages.flatMap { it.issues }
+
         return DocumentLayout(
             pages = pages,
             pageWidthPt = pageWidth,
             pageHeightPt = pageHeight,
             contentWidthPt = contentWidth,
             contentHeightPt = contentHeight,
-            rawText = text
+            rawText = text,
+            issues = allIssues
         )
     }
 
@@ -334,6 +388,28 @@ object DocumentLayoutEngine {
                     baselinePt = it.baselinePt - (pageLines.firstOrNull()?.topPt ?: 0f)
                 )
             }
+            val pageIssues = mutableListOf<LayoutIssue>()
+            normalized.forEachIndexed { lineIdx, line ->
+                if (line.isOverflowing) {
+                    pageIssues += LayoutIssue(
+                        pageIndex = pageIndex,
+                        lineIndexOnPage = lineIdx,
+                        issueType = LayoutIssue.IssueType.HORIZONTAL_OVERFLOW,
+                        message = "السطر ${lineIdx + 1} في الصفحة ${pageIndex + 1} يتجاوز عرض المحتوى بمقدار %.1f نقطة".format(line.overflowAmountPt),
+                        overflowAmountPt = line.overflowAmountPt
+                    )
+                }
+            }
+            if (usedHeight > contentHeight + 0.5f) {
+                pageIssues += LayoutIssue(
+                    pageIndex = pageIndex,
+                    lineIndexOnPage = normalized.lastIndex.coerceAtLeast(0),
+                    issueType = LayoutIssue.IssueType.VERTICAL_PAGE_OVERFLOW,
+                    message = "الصفحة ${pageIndex + 1} تتجاوز الارتفاع القابل للطباعة بمقدار %.1f نقطة".format(usedHeight - contentHeight),
+                    overflowAmountPt = usedHeight - contentHeight
+                )
+            }
+
             pages += PageLayout(
                 index = pageIndex++,
                 lines = normalized,
@@ -344,7 +420,8 @@ object DocumentLayoutEngine {
                 contentHeightPt = contentHeight,
                 leftMarginPt = left,
                 topMarginPt = top,
-                alignment = alignment
+                alignment = alignment,
+                issues = pageIssues
             )
             pageLines = mutableListOf()
             usedHeight = 0f
@@ -375,10 +452,14 @@ object DocumentLayoutEngine {
             TextAlignOption.CENTER -> Layout.Alignment.ALIGN_CENTER
             TextAlignOption.LEFT -> Layout.Alignment.ALIGN_OPPOSITE
         }
+        val textDirection = when (alignment) {
+            TextAlignOption.LEFT -> TextDirectionHeuristics.FIRSTSTRONG_LTR
+            else -> TextDirectionHeuristics.FIRSTSTRONG_RTL
+        }
         return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
             StaticLayout.Builder.obtain(text, 0, text.length, paint, width.coerceAtLeast(1))
                 .setAlignment(layoutAlignment)
-                .setTextDirection(TextDirectionHeuristics.RTL)
+                .setTextDirection(textDirection)
                 .setLineSpacing(0f, lineSpacingMultiplier)
                 .setIncludePad(false)
                 .build()
@@ -412,7 +493,9 @@ object DocumentLayoutEngine {
         canvas.translate(page.leftMarginPt, page.topMarginPt)
         page.lines.forEach { line ->
             if (line.text.isEmpty()) return@forEach
-            val lineWidth = maxOf(page.contentWidthPt, paint.measureText(line.text)).toInt()
+            // Keep layout width strictly bounded to page.contentWidthPt.
+            // Never artificially expand, which would push RTL text outside margins!
+            val lineWidth = page.contentWidthPt.toInt().coerceAtLeast(1)
             val lineLayout = createStaticLayout(line.text, paint, lineWidth, page.alignment, 1f)
             canvas.save()
             canvas.translate(0f, line.topPt)

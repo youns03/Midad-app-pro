@@ -117,6 +117,19 @@ class KashidaEngineTest {
     }
 
     @Test
+    fun shaping_preserves_manual_tatweel_when_auto_kashida_is_enabled() {
+        val source = "كــتاب عربي"
+        val shaped = KashidaEngine.shapeLine(
+            source,
+            deficitPx = 200f,
+            level = KashidaLevel.HEAVY,
+            paint = paint
+        )
+
+        assertEquals(source, shaped)
+    }
+
+    @Test
     fun layout_keeps_rendered_lines_within_content_width() {
         val source = "كتب العربية الجميلة للاختبار"
         val layout = DocumentLayoutEngine.build(
@@ -134,5 +147,48 @@ class KashidaEngineTest {
         assertTrue(layout.pages.all { page ->
             page.lines.all { it.widthPt <= page.contentWidthPt + 0.5f }
         })
+    }
+
+    @Test
+    fun export_readiness_accepts_a_valid_layout() {
+        val layout = DocumentLayoutEngine.build(
+            text = "مِداد عربي English 123",
+            typeface = Typeface.DEFAULT,
+            fontSizePt = 18f,
+            textAlign = TextAlignOption.RIGHT,
+            margins = PageMargins(20f, 20f, 20f, 20f, MarginUnit.MILLIMETER),
+            pageSize = PageSize.A4,
+            kashidaEnabled = false,
+            kashidaLevel = KashidaLevel.OFF
+        )
+
+        val readiness = DocumentLayoutEngine.assessReadiness(layout)
+
+        assertTrue(readiness.isReady)
+        assertTrue(readiness.blockingIssues.isEmpty())
+    }
+
+    @Test
+    fun export_readiness_blocks_text_outside_content_bounds() {
+        val layout = DocumentLayoutEngine.build(
+            text = "نص عربي",
+            typeface = Typeface.DEFAULT,
+            fontSizePt = 18f,
+            textAlign = TextAlignOption.RIGHT,
+            margins = PageMargins(20f, 20f, 20f, 20f, MarginUnit.MILLIMETER),
+            pageSize = PageSize.A4,
+            kashidaEnabled = false,
+            kashidaLevel = KashidaLevel.OFF
+        )
+        val page = layout.pages.first()
+        val overflowingPage = page.copy(
+            lines = page.lines.map { it.copy(widthPt = page.contentWidthPt + 10f) }
+        )
+        val overflowingLayout = layout.copy(pages = listOf(overflowingPage))
+
+        val readiness = DocumentLayoutEngine.assessReadiness(overflowingLayout)
+
+        assertFalse(readiness.isReady)
+        assertTrue(readiness.blockingIssues.any { it.code == "TEXT_OUTSIDE_BOUNDS" })
     }
 }

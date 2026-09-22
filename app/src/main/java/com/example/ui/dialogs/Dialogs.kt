@@ -41,6 +41,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
@@ -384,6 +385,9 @@ fun PreviewExportDialog(
     onDismiss: () -> Unit
 ) {
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+        val readiness = remember(documentLayout) {
+            DocumentLayoutEngine.assessReadiness(documentLayout)
+        }
         Dialog(
             onDismissRequest = onDismiss,
             properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -420,6 +424,56 @@ fun PreviewExportDialog(
                         }
                         IconButton(onClick = onDismiss) {
                             Icon(Icons.Default.Close, contentDescription = "إغلاق")
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("export_readiness_card"),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (readiness.isReady) {
+                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+                            } else {
+                                MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.65f)
+                            }
+                        )
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                text = if (readiness.isReady) {
+                                    "جاهزية التصدير: لا توجد مشكلة تخطيط مانعة"
+                                } else {
+                                    "جاهزية التصدير: تحتاج إلى مراجعة"
+                                },
+                                fontWeight = FontWeight.Bold,
+                                color = if (readiness.isReady) {
+                                    MaterialTheme.colorScheme.onPrimaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.onErrorContainer
+                                }
+                            )
+                            if (readiness.issues.isEmpty()) {
+                                Text(
+                                    text = "تم فحص أبعاد الصفحة، عدد الصفحات، وحدود الأسطر من نفس DocumentLayout.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            } else {
+                                readiness.issues.forEach { issue ->
+                                    Text(
+                                        text = "• ${issue.messageAr}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (issue.blocking) {
+                                            MaterialTheme.colorScheme.onErrorContainer
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        }
+                                    )
+                                }
+                            }
                         }
                     }
 

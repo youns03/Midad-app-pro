@@ -112,6 +112,10 @@ object KashidaEngine {
     ): String {
         if (level == KashidaLevel.OFF || deficitPx <= 0f || line.isBlank()) return line
 
+        // Manual tatweel is user-authored content. Preserve it rather than
+        // stripping it as an intermediate step when automatic kashida is on.
+        if (line.indexOf(TATWEEL) >= 0) return line
+
         val clean = stripKashida(line)
         val points = findConnectionPointsInWord(clean)
         if (points.isEmpty()) return clean
@@ -186,6 +190,20 @@ object KashidaEngine {
  */
 object DocumentLayoutEngine {
 
+    data class ReadinessIssue(
+        val code: String,
+        val messageAr: String,
+        val blocking: Boolean
+    )
+
+    data class ExportReadiness(
+        val issues: List<ReadinessIssue>
+    ) {
+        val blockingIssues: List<ReadinessIssue> get() = issues.filter { it.blocking }
+        val warnings: List<ReadinessIssue> get() = issues.filterNot { it.blocking }
+        val isReady: Boolean get() = blockingIssues.isEmpty()
+    }
+
     data class LayoutLine(
         val rawStart: Int,
         val rawEnd: Int,
@@ -219,6 +237,55 @@ object DocumentLayoutEngine {
         val rawText: String
     ) {
         val pageCount: Int get() = pages.size
+    }
+
+    /**
+     * Deterministic checks over the canonical layout before export.
+     * This reports measurable layout risks without creating a second layout.
+     */
+    fun assessReadiness(layout: DocumentLayout): ExportReadiness {
+        val issues = mutableListOf<ReadinessIssue>()
+        if (layout.pages.isEmpty()) {
+            issues += ReadinessIssue(
+                code = "NO_PAGES",
+                messageAr = "لا توجد صفحات قابلة للتصدير.",
+                blocking = true
+            )
+        }
+        if (layout.pageWidthPt <= 0f || layout.pageHeightPt <= 0f ||
+            layout.contentWidthPt <= 0f || layout.contentHeightPt <= 0f
+        ) {
+            issues += ReadinessIssue(
+                code = "INVALID_PAGE_GEOMETRY",
+                messageAr = "أبعاد الصفحة أو مساحة المحتوى غير صالحة.",
+                blocking = true
+            )
+        }
+        if (layout.pages.any { page ->
+                page.lines.any { it.widthPt > page.contentWidthPt + 0.5f }
+            }
+        ) {
+            issues += ReadinessIssue(
+                code = "TEXT_OUTSIDE_BOUNDS",
+                messageAr = "يوجد سطر يتجاوز عرض منطقة المحتوى.",
+                blocking = true
+            )
+        }
+        if (layout.pages.size > 1 && layout.pages.any { it.lines.isEmpty() }) {
+            issues += ReadinessIssue(
+                code = "EMPTY_PAGE",
+                messageAr = "توجد صفحة فارغة داخل مستند متعدد الصفحات.",
+                blocking = false
+            )
+        }
+        if (layout.pages.size != layout.pageCount) {
+            issues += ReadinessIssue(
+                code = "PAGE_COUNT_MISMATCH",
+                messageAr = "عدد الصفحات المعروض لا يطابق التخطيط canonical.",
+                blocking = true
+            )
+        }
+        return ExportReadiness(issues)
     }
 
     fun build(

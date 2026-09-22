@@ -95,4 +95,16 @@ class ExampleUnitTest {
         assertEquals(148f, PageSize.A5.widthMm, 0.01f)
         assertEquals(210f, PageSize.A5.heightMm, 0.01f)
     }
+
+    @Test
+    fun testDocumentUnitsPrecision() {
+        val ptFromMm = com.example.layout.DocumentUnits.mmToPt(25.4f)
+        assertEquals(72.0f, ptFromMm, 0.001f)
+
+        val mmFromPt = com.example.layout.DocumentUnits.ptToMm(72.0f)
+        assertEquals(25.4f, mmFromPt, 0.001f)
+
+        val ptFromInch = com.example.layout.DocumentUnits.inchToPt(1.0f)
+        assertEquals(72.0f, ptFromInch, 0.001f)
+    }
 }

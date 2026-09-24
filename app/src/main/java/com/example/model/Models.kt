@@ -72,6 +72,15 @@ enum class TextAlignOption(val labelAr: String, val composeAlign: TextAlign) {
 }
 
 /**
+ * Logical text reading and layout base direction.
+ */
+enum class BaseDirection(val displayNameAr: String) {
+    RTL("من اليمين إلى اليسار (عربي)"),
+    LTR("من اليسار إلى اليمين (لاتيني)"),
+    AUTO("تلقائي بحسب المحتوى")
+}
+
+/**
  * Preset Kashida / Tatweel levels.
  */
 enum class KashidaLevel(val labelAr: String, val tatweelCount: Int) {

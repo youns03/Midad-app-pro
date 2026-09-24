@@ -37,7 +37,9 @@ object PreflightEngine {
         typeface: Typeface,
         fontSizePt: Float,
         pageSize: PageSize,
-        margins: PageMargins
+        margins: PageMargins,
+        fontId: String = "",
+        fontName: String = ""
     ): PreflightReport {
         val diagnostics = mutableListOf<PreflightDiagnostic>()
 
@@ -113,18 +115,19 @@ object PreflightEngine {
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             val missingGlyphs = mutableSetOf<Char>()
-            val sampleChars = layout.rawText.filter { !it.isWhitespace() && it != '\n' }.take(500)
-            for (char in sampleChars) {
+            val distinctChars = layout.rawText.filter { !it.isWhitespace() && it != '\n' && it != '\r' && it != '\u000c' }.toSet()
+            for (char in distinctChars) {
                 if (!paint.hasGlyph(char.toString())) {
                     missingGlyphs += char
                 }
             }
             if (missingGlyphs.isNotEmpty()) {
                 val sampleMissing = missingGlyphs.take(5).joinToString(", ") { "'$it'" }
+                val targetFont = if (fontName.isNotBlank()) "خط $fontName" else "الخط الحالي"
                 diagnostics += PreflightDiagnostic(
                     severity = PreflightSeverity.WARNING,
-                    title = "محارف قد لا يدعمها الخط الحالي",
-                    description = "الخط المحدد قد يفتقر إلى رسوم المحارف التالية: $sampleMissing. قد يُستخدم خط احتياطي من النظام."
+                    title = "محارف قد لا يدعمها $targetFont",
+                    description = "$targetFont يفتقر إلى رسوم المحارف التالية: $sampleMissing. قد يُستخدم خط احتياطي من النظام."
                 )
             }
         }

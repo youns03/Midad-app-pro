@@ -5,6 +5,7 @@ import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextDirectionHeuristics
 import android.text.TextPaint
+import com.example.model.BaseDirection
 import com.example.model.KashidaLevel
 import com.example.model.PageMargins
 import com.example.model.PageSize
@@ -35,14 +36,14 @@ object KashidaEngine {
         c in '\u06D6'..'\u06ED'
 
     fun isArabicLetter(c: Char): Boolean =
-        (c in '\u0621'..'\u064A') || (c in '\u0671'..'\u06D3')
+        ((c in '\u0621'..'\u064A' && c != TATWEEL) || (c in '\u0671'..'\u06D3')) && !isDiacritic(c)
 
     fun stripKashida(text: String): String = text.replace(TATWEEL.toString(), "")
 
     fun canConnectForward(firstChar: Char, secondChar: Char): Boolean {
         if (!isArabicLetter(firstChar) || !isArabicLetter(secondChar)) return false
         if (firstChar in NON_CONNECTING_FORWARD) return false
-        if (firstChar == 'ل' && secondChar in setOf('ا', 'أ', 'إ', 'آ')) return false
+        if (firstChar == 'ل' && secondChar in setOf('ا', 'أ', 'إ', 'آ', '\u0671')) return false
         return true
     }
 
@@ -228,7 +229,8 @@ object DocumentLayoutEngine {
         val widthPt: Float,
         val paragraphEnd: Boolean,
         val isOverflowing: Boolean = false,
-        val overflowAmountPt: Float = 0f
+        val overflowAmountPt: Float = 0f,
+        val pageBreakAfter: Boolean = false
     )
 
     data class PageLayout(
@@ -242,6 +244,7 @@ object DocumentLayoutEngine {
         val leftMarginPt: Float,
         val topMarginPt: Float,
         val alignment: TextAlignOption,
+        val baseDirection: BaseDirection = BaseDirection.RTL,
         val issues: List<LayoutIssue> = emptyList()
     ) {
         val hasOverflow: Boolean get() = issues.any {
@@ -276,8 +279,13 @@ object DocumentLayoutEngine {
         pageSize: PageSize,
         kashidaEnabled: Boolean,
         kashidaLevel: KashidaLevel,
-        lineSpacingMultiplier: Float = 1.35f
+        lineSpacingMultiplier: Float = 1.35f,
+        baseDirection: BaseDirection = BaseDirection.AUTO
     ): DocumentLayout {
+        val resolvedDirection = when (baseDirection) {
+            BaseDirection.AUTO -> if (textAlign == TextAlignOption.LEFT) BaseDirection.LTR else BaseDirection.RTL
+            else -> baseDirection
+        }
         val pageWidth = pageSize.widthPt
         val pageHeight = pageSize.heightPt
         val left = margins.leftMm * 72f / 25.4f
@@ -292,45 +300,140 @@ object DocumentLayoutEngine {
             textSize = fontSizePt
             isAntiAlias = true
         }
-        val baseLayout = createStaticLayout(text, paint, contentWidth.toInt(), textAlign, lineSpacingMultiplier)
         val lines = mutableListOf<LayoutLine>()
+        val segments = text.split('\u000c')
+        var currentGlobalOffset = 0
 
-        for (i in 0 until baseLayout.lineCount) {
-            val rawStart = baseLayout.getLineStart(i)
-            val rawEndWithBreak = baseLayout.getLineEnd(i)
-            val rawEnd = rawEndWithBreak
-                .coerceAtMost(text.length)
-                .let { end -> if (end > rawStart && text[end - 1] == '\n') end - 1 else end }
-                .let { end -> if (end > rawStart && text[end - 1] == '\r') end - 1 else end }
-            val rawLine = text.substring(rawStart, rawEnd)
-            val isLastLine = i == baseLayout.lineCount - 1
-            val hasParagraphBreak = rawEndWithBreak > rawEnd
-            val rawWidth = paint.measureText(rawLine)
-            val canJustify = textAlign == TextAlignOption.JUSTIFY && !isLastLine && !hasParagraphBreak
-            val rendered = if (kashidaEnabled && canJustify) {
-                KashidaEngine.shapeLine(
-                    rawLine,
-                    (contentWidth - rawWidth).coerceAtLeast(0f),
-                    kashidaLevel,
-                    paint
-                )
-            } else rawLine
-            val width = paint.measureText(rendered)
-            val overflowAmount = (width - contentWidth).coerceAtLeast(0f)
-            val isOverflowing = overflowAmount > 0.5f
+        for (segIdx in segments.indices) {
+            val segmentText = segments[segIdx]
+            val isLastSegment = segIdx == segments.lastIndex
+            if (segmentText.isEmpty()) {
+                if (!isLastSegment) {
+                    lines += LayoutLine(
+                        rawStart = currentGlobalOffset,
+                        rawEnd = currentGlobalOffset,
+                        text = "",
+                        topPt = 0f,
+                        bottomPt = fontSizePt * lineSpacingMultiplier,
+                        baselinePt = fontSizePt,
+                        widthPt = 0f,
+                        paragraphEnd = true,
+                        isOverflowing = false,
+                        overflowAmountPt = 0f,
+                        pageBreakAfter = true
+                    )
+                }
+                currentGlobalOffset += 1
+                continue
+            }
 
-            lines += LayoutLine(
-                rawStart = rawStart,
-                rawEnd = rawEnd,
-                text = rendered,
-                topPt = baseLayout.getLineTop(i).toFloat(),
-                bottomPt = baseLayout.getLineBottom(i).toFloat(),
-                baselinePt = baseLayout.getLineBaseline(i).toFloat(),
-                widthPt = width,
-                paragraphEnd = hasParagraphBreak,
-                isOverflowing = isOverflowing,
-                overflowAmountPt = overflowAmount
-            )
+            val baseLayout = createStaticLayout(segmentText, paint, contentWidth.toInt(), textAlign, lineSpacingMultiplier, resolvedDirection)
+            if (baseLayout.lineCount <= 1 && segmentText.length > 20 && paint.measureText(segmentText) > contentWidth) {
+                // Fallback for headless/test environments where StaticLayout shadow does not soft-wrap words automatically
+                val words = segmentText.split(" ")
+                val lineWords = mutableListOf<String>()
+                var lineStart = 0
+                var currentLineWidth = 0f
+                var lineTop = 0f
+                val defaultLineH = fontSizePt * lineSpacingMultiplier
+
+                for (word in words) {
+                    val candidate = if (lineWords.isEmpty()) word else " $word"
+                    val candWidth = paint.measureText(candidate)
+                    if (lineWords.isNotEmpty() && currentLineWidth + candWidth > contentWidth) {
+                        val lineStr = lineWords.joinToString(" ")
+                        val lineEnd = lineStart + lineStr.length
+                        val rawWidth = paint.measureText(lineStr)
+                        val canJustify = textAlign == TextAlignOption.JUSTIFY
+                        val rendered = if (kashidaEnabled && canJustify) {
+                            KashidaEngine.shapeLine(lineStr, (contentWidth - rawWidth).coerceAtLeast(0f), kashidaLevel, paint)
+                        } else lineStr
+                        val width = paint.measureText(rendered)
+                        val overflowAmount = (width - contentWidth).coerceAtLeast(0f)
+                        lines += LayoutLine(
+                            rawStart = currentGlobalOffset + lineStart,
+                            rawEnd = currentGlobalOffset + lineEnd,
+                            text = rendered,
+                            topPt = lineTop,
+                            bottomPt = lineTop + defaultLineH,
+                            baselinePt = lineTop + defaultLineH * 0.8f,
+                            widthPt = width,
+                            paragraphEnd = false,
+                            isOverflowing = overflowAmount > 0.5f,
+                            overflowAmountPt = overflowAmount,
+                            pageBreakAfter = false
+                        )
+                        lineTop += defaultLineH
+                        lineStart = lineEnd + 1
+                        lineWords.clear()
+                        currentLineWidth = 0f
+                    }
+                    lineWords.add(word)
+                    currentLineWidth += paint.measureText(if (lineWords.size == 1) word else " $word")
+                }
+                if (lineWords.isNotEmpty()) {
+                    val lineStr = lineWords.joinToString(" ")
+                    val lineEnd = lineStart + lineStr.length
+                    val rendered = lineStr
+                    val width = paint.measureText(rendered)
+                    val overflowAmount = (width - contentWidth).coerceAtLeast(0f)
+                    lines += LayoutLine(
+                        rawStart = currentGlobalOffset + lineStart,
+                        rawEnd = currentGlobalOffset + lineEnd,
+                        text = rendered,
+                        topPt = lineTop,
+                        bottomPt = lineTop + defaultLineH,
+                        baselinePt = lineTop + defaultLineH * 0.8f,
+                        widthPt = width,
+                        paragraphEnd = !isLastSegment,
+                        isOverflowing = overflowAmount > 0.5f,
+                        overflowAmountPt = overflowAmount,
+                        pageBreakAfter = !isLastSegment
+                    )
+                }
+            } else {
+                for (i in 0 until baseLayout.lineCount) {
+                    val segStart = baseLayout.getLineStart(i)
+                    val segEndWithBreak = baseLayout.getLineEnd(i)
+                    val segEnd = segEndWithBreak
+                        .coerceAtMost(segmentText.length)
+                        .let { end -> if (end > segStart && segmentText[end - 1] == '\n') end - 1 else end }
+                        .let { end -> if (end > segStart && segmentText[end - 1] == '\r') end - 1 else end }
+                    val rawLine = segmentText.substring(segStart, segEnd)
+                    val isLastLineOfSeg = i == baseLayout.lineCount - 1
+                    val hasParagraphBreak = segEndWithBreak > segEnd || (isLastLineOfSeg && !isLastSegment)
+                    val rawWidth = paint.measureText(rawLine)
+                    val canJustify = textAlign == TextAlignOption.JUSTIFY && !isLastLineOfSeg && !hasParagraphBreak
+                    val rendered = if (kashidaEnabled && canJustify) {
+                        KashidaEngine.shapeLine(
+                            rawLine,
+                            (contentWidth - rawWidth).coerceAtLeast(0f),
+                            kashidaLevel,
+                            paint
+                        )
+                    } else rawLine
+                    val width = paint.measureText(rendered)
+                    val overflowAmount = (width - contentWidth).coerceAtLeast(0f)
+                    val isOverflowing = overflowAmount > 0.5f
+
+                    val isPageBreakAfter = isLastLineOfSeg && !isLastSegment
+
+                    lines += LayoutLine(
+                        rawStart = currentGlobalOffset + segStart,
+                        rawEnd = currentGlobalOffset + segEnd,
+                        text = rendered,
+                        topPt = baseLayout.getLineTop(i).toFloat(),
+                        bottomPt = baseLayout.getLineBottom(i).toFloat(),
+                        baselinePt = baseLayout.getLineBaseline(i).toFloat(),
+                        widthPt = width,
+                        paragraphEnd = hasParagraphBreak,
+                        isOverflowing = isOverflowing,
+                        overflowAmountPt = overflowAmount,
+                        pageBreakAfter = isPageBreakAfter
+                    )
+                }
+            }
+            currentGlobalOffset += segmentText.length + 1
         }
 
         val pages = paginate(
@@ -342,7 +445,10 @@ object DocumentLayoutEngine {
             contentHeight = contentHeight,
             left = left,
             top = top,
-            alignment = textAlign
+            alignment = textAlign,
+            baseDirection = resolvedDirection,
+            fontSizePt = fontSizePt,
+            lineSpacingMultiplier = lineSpacingMultiplier
         )
 
         val allIssues = pages.flatMap { it.issues }
@@ -367,11 +473,14 @@ object DocumentLayoutEngine {
         contentHeight: Float,
         left: Float,
         top: Float,
-        alignment: TextAlignOption
+        alignment: TextAlignOption,
+        baseDirection: BaseDirection = BaseDirection.RTL,
+        fontSizePt: Float = 16f,
+        lineSpacingMultiplier: Float = 1.35f
     ): List<PageLayout> {
         if (lines.isEmpty()) {
             return listOf(
-                PageLayout(0, emptyList(), "", pageWidth, pageHeight, contentWidth, contentHeight, left, top, alignment)
+                PageLayout(0, emptyList(), "", pageWidth, pageHeight, contentWidth, contentHeight, left, top, alignment, baseDirection)
             )
         }
 
@@ -379,14 +488,20 @@ object DocumentLayoutEngine {
         var pageLines = mutableListOf<LayoutLine>()
         var usedHeight = 0f
         var pageIndex = 0
+        val defaultLineHeight = fontSizePt * lineSpacingMultiplier
 
         fun flush() {
-            val normalized = pageLines.map {
-                it.copy(
-                    topPt = it.topPt - (pageLines.firstOrNull()?.topPt ?: 0f),
-                    bottomPt = it.bottomPt - (pageLines.firstOrNull()?.topPt ?: 0f),
-                    baselinePt = it.baselinePt - (pageLines.firstOrNull()?.topPt ?: 0f)
+            var currentTop = 0f
+            val normalized = pageLines.map { line ->
+                val rawH = line.bottomPt - line.topPt
+                val lineH = if (rawH > 5f) rawH else defaultLineHeight
+                val normLine = line.copy(
+                    topPt = currentTop,
+                    bottomPt = currentTop + lineH,
+                    baselinePt = currentTop + lineH * 0.8f
                 )
+                currentTop += lineH
+                normLine
             }
             val pageIssues = mutableListOf<LayoutIssue>()
             normalized.forEachIndexed { lineIdx, line ->
@@ -421,6 +536,7 @@ object DocumentLayoutEngine {
                 leftMarginPt = left,
                 topMarginPt = top,
                 alignment = alignment,
+                baseDirection = baseDirection,
                 issues = pageIssues
             )
             pageLines = mutableListOf()
@@ -428,12 +544,16 @@ object DocumentLayoutEngine {
         }
 
         for (line in lines) {
-            val lineHeight = (line.bottomPt - line.topPt).coerceAtLeast(1f)
+            val rawH = line.bottomPt - line.topPt
+            val lineHeight = if (rawH > 5f) rawH else defaultLineHeight
             if (pageLines.isNotEmpty() && usedHeight + lineHeight > contentHeight) {
                 flush()
             }
             pageLines += line
             usedHeight += lineHeight
+            if (line.pageBreakAfter) {
+                flush()
+            }
         }
         if (pageLines.isNotEmpty()) flush()
 
@@ -445,16 +565,21 @@ object DocumentLayoutEngine {
         paint: TextPaint,
         width: Int,
         alignment: TextAlignOption,
-        lineSpacingMultiplier: Float = 1.35f
+        lineSpacingMultiplier: Float = 1.35f,
+        baseDirection: BaseDirection = BaseDirection.AUTO
     ): StaticLayout {
         val layoutAlignment = when (alignment) {
             TextAlignOption.RIGHT, TextAlignOption.JUSTIFY -> Layout.Alignment.ALIGN_NORMAL
             TextAlignOption.CENTER -> Layout.Alignment.ALIGN_CENTER
             TextAlignOption.LEFT -> Layout.Alignment.ALIGN_OPPOSITE
         }
-        val textDirection = when (alignment) {
-            TextAlignOption.LEFT -> TextDirectionHeuristics.FIRSTSTRONG_LTR
-            else -> TextDirectionHeuristics.FIRSTSTRONG_RTL
+        val textDirection = when (baseDirection) {
+            BaseDirection.RTL -> TextDirectionHeuristics.RTL
+            BaseDirection.LTR -> TextDirectionHeuristics.LTR
+            BaseDirection.AUTO -> when (alignment) {
+                TextAlignOption.LEFT -> TextDirectionHeuristics.FIRSTSTRONG_LTR
+                else -> TextDirectionHeuristics.FIRSTSTRONG_RTL
+            }
         }
         return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
             StaticLayout.Builder.obtain(text, 0, text.length, paint, width.coerceAtLeast(1))
@@ -496,7 +621,7 @@ object DocumentLayoutEngine {
             // Keep layout width strictly bounded to page.contentWidthPt.
             // Never artificially expand, which would push RTL text outside margins!
             val lineWidth = page.contentWidthPt.toInt().coerceAtLeast(1)
-            val lineLayout = createStaticLayout(line.text, paint, lineWidth, page.alignment, 1f)
+            val lineLayout = createStaticLayout(line.text, paint, lineWidth, page.alignment, 1f, page.baseDirection)
             canvas.save()
             canvas.translate(0f, line.topPt)
             lineLayout.draw(canvas)

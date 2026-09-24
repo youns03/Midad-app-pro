@@ -41,45 +41,45 @@ object TextDocumentImporter {
                 ?: return@withContext ImportDocumentOutcome.Error("تعذر فتح الملف للقراءة.")
 
             val rawBytes = inputStream.use { it.readBytes() }
+            val decoded = decodeBytes(rawBytes, fileName)
+                ?: return@withContext ImportDocumentOutcome.Error("محتوى الملف فارغ أو لا يحتوي على نصوص صالحة.")
 
-            if (rawBytes.isEmpty()) {
-                return@withContext ImportDocumentOutcome.Error("الملف المحدد فارغ تماماً.")
-            }
-
-            // Decode UTF-8 safely, replacing malformed bytes instead of crashing
-            val decoder = StandardCharsets.UTF_8.newDecoder()
-                .onMalformedInput(CodingErrorAction.REPLACE)
-                .onUnmappableCharacter(CodingErrorAction.REPLACE)
-
-            val text = decoder.decode(java.nio.ByteBuffer.wrap(rawBytes)).toString()
-
-            // Remove UTF-8 BOM if present
-            val cleanText = if (text.startsWith("\uFEFF")) text.substring(1) else text
-
-            if (cleanText.isBlank()) {
-                return@withContext ImportDocumentOutcome.Error("محتوى الملف فارغ أو لا يحتوي على نصوص صالحة.")
-            }
-
-            val title = fileName.substringBeforeLast('.')
-                .replace('_', ' ')
-                .replace('-', ' ')
-                .trim()
-                .ifBlank { "مستند مستورد" }
-
-            val lineCount = cleanText.lines().size
-
-            ImportDocumentOutcome.Success(
-                ImportedDocumentResult(
-                    title = title,
-                    content = cleanText,
-                    fileName = fileName,
-                    characterCount = cleanText.length,
-                    lineCount = lineCount
-                )
-            )
+            ImportDocumentOutcome.Success(decoded)
         } catch (e: Exception) {
             ImportDocumentOutcome.Error("حدث خطأ أثناء قراءة الملف: ${e.localizedMessage ?: e.message}")
         }
+    }
+
+    /**
+     * Decodes raw bytes strictly preserving UTF-8 text integrity, blank lines,
+     * consecutive spaces, punctuation, Markdown tokens, and Arabic/Latin glyphs,
+     * removing UTF-8 BOM if present.
+     */
+    fun decodeBytes(rawBytes: ByteArray, fileName: String = "مستند.txt"): ImportedDocumentResult? {
+        if (rawBytes.isEmpty()) return null
+
+        val decoder = StandardCharsets.UTF_8.newDecoder()
+            .onMalformedInput(CodingErrorAction.REPLACE)
+            .onUnmappableCharacter(CodingErrorAction.REPLACE)
+
+        val text = decoder.decode(java.nio.ByteBuffer.wrap(rawBytes)).toString()
+        val cleanText = if (text.startsWith("\uFEFF")) text.substring(1) else text
+        if (cleanText.isBlank()) return null
+
+        val title = fileName.substringBeforeLast('.')
+            .replace('_', ' ')
+            .replace('-', ' ')
+            .trim()
+            .ifBlank { "مستند مستورد" }
+
+        val lineCount = cleanText.lines().size
+        return ImportedDocumentResult(
+            title = title,
+            content = cleanText,
+            fileName = fileName,
+            characterCount = cleanText.length,
+            lineCount = lineCount
+        )
     }
 
     fun getFileNameFromUri(context: Context, uri: Uri): String? {

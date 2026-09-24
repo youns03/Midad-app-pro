@@ -115,6 +115,44 @@ class DocumentRepository(
                 kashidaEnabled = true,
                 kashidaLevel = KashidaLevel.LIGHT,
                 margins = PageMargins(20f, 20f, 20f, 20f, MarginUnit.MILLIMETER)
+            ),
+            DocumentTemplate(
+                id = "book_chapter",
+                titleAr = "مفتتح فصل روائي / كتاب",
+                descriptionAr = "تنضيد كلاسيكي لصفحات الكتب والروايات بخط أميري وهوامش طباعية متوازنة وكشيدة متوسطة",
+                categoryAr = "نشر مكتبي وكتب",
+                sampleText = """الفصل الأول: هبوب الريح في الوادي القديم
+
+كان المساء يهبط ببطء فوق تلال المدينة العتيقة، بينما تنساب أسراب الطيور نحو الواحات البعيدة. وقف الشيخ متأملاً الأفق الممتد، وفي عينيه وميض من ذكريات مضت وقصص ترويها الرياح جيلاً بعد جيل.
+
+لم تكن الرحلة سهلة، لكن العزيمة التي سكنت قلوب السائرين جعلت الصخور تلين تحت وطأة خطاهم، حتى بلغت القافلة مشارف المستقر قبل مغيب الشمس.""",
+                fontId = "amiri",
+                fontSizePt = 17f,
+                textColor = androidx.compose.ui.graphics.Color(0xFF18181B),
+                pageColor = androidx.compose.ui.graphics.Color(0xFFFAF8F5),
+                align = TextAlignOption.JUSTIFY,
+                kashidaEnabled = true,
+                kashidaLevel = KashidaLevel.MEDIUM,
+                margins = PageMargins(25f, 25f, 22f, 20f, MarginUnit.MILLIMETER)
+            ),
+            DocumentTemplate(
+                id = "academic_research",
+                titleAr = "بحث علمي / دراسة أكاديمية",
+                descriptionAr = "تنسيق رصين للأبحاث والأوراق المحكمة بهوامش نظامية وضبط كامل دقيق",
+                categoryAr = "أبحاث ودراسات",
+                sampleText = """الملخص التنفيذي للدراسة
+
+تهدف هذه الدراسة إلى استقصاء أثر التنضيد الرقمي على سرعة الاستيعاب القرائي للنصوص العربية الممدودة، ومقارنة معدلات القراءة بين الأنماط المضبوطة بالمسافات البيضاء والأنماط المعتمدة على الكشيدة المحسوبة هندسياً.
+
+وقد خلص البحث إلى أن الضبط المتوازن يحقق راحة بصرية فائقة ويقلل من تشتت النظر أثناء القراءة المتواصلة في الصفحات الطويلة والمراجع الأكاديمية.""",
+                fontId = "amiri",
+                fontSizePt = 15f,
+                textColor = androidx.compose.ui.graphics.Color(0xFF09090B),
+                pageColor = androidx.compose.ui.graphics.Color(0xFFFFFFFF),
+                align = TextAlignOption.JUSTIFY,
+                kashidaEnabled = true,
+                kashidaLevel = KashidaLevel.LIGHT,
+                margins = PageMargins(25f, 25f, 25f, 25f, MarginUnit.MILLIMETER)
             )
         )
     }

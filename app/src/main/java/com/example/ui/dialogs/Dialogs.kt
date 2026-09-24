@@ -63,6 +63,7 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import android.view.View
 import com.example.export.PreflightEngine
+import com.example.export.PreflightSeverity
 import com.example.kashida.DocumentLayoutEngine
 import com.example.model.DocumentTemplate
 import com.example.model.FontItem
@@ -405,13 +406,15 @@ fun PreviewExportDialog(
                         .fillMaxSize()
                         .padding(16.dp)
                 ) {
-                    val preflightReport = remember(documentLayout, typeface, uiState.fontSizePt, uiState.paperSize, uiState.margins) {
+                    val preflightReport = remember(documentLayout, typeface, uiState.fontSizePt, uiState.paperSize, uiState.margins, uiState.selectedFont) {
                         PreflightEngine.inspect(
                             layout = documentLayout,
                             typeface = typeface,
                             fontSizePt = uiState.fontSizePt,
                             pageSize = uiState.paperSize,
-                            margins = uiState.margins
+                            margins = uiState.margins,
+                            fontId = uiState.selectedFont.id,
+                            fontName = uiState.selectedFont.nameAr
                         )
                     }
 
@@ -475,13 +478,18 @@ fun PreviewExportDialog(
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            if (preflightReport.diagnostics.isNotEmpty() && !preflightReport.isReadyForExport) {
+                            if (preflightReport.diagnostics.isNotEmpty()) {
                                 Spacer(modifier = Modifier.height(4.dp))
                                 preflightReport.diagnostics.take(3).forEach { diag ->
+                                    val itemColor = when (diag.severity) {
+                                        PreflightSeverity.ERROR -> MaterialTheme.colorScheme.error
+                                        PreflightSeverity.WARNING -> MaterialTheme.colorScheme.secondary
+                                        PreflightSeverity.INFO -> MaterialTheme.colorScheme.onSurfaceVariant
+                                    }
                                     Text(
                                         text = "• ${diag.title}: ${diag.description}",
                                         fontSize = 10.sp,
-                                        color = MaterialTheme.colorScheme.error
+                                        color = itemColor
                                     )
                                 }
                             }

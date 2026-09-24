@@ -399,7 +399,7 @@ fun ManualKashidaInteractiveView(
                                 onClick = {
                                     if (tatweelSliderVal < 8) {
                                         tatweelSliderVal++
-                                        onApplyKashida(cleanWord, point.indexInWord, tatweelSliderVal, selectedWordIdx!!)
+                                        onApplyKashida(cleanWord, point.indexInWord, tatweelSliderVal, words[selectedWordIdx!!].second)
                                     }
                                 }
                             ) {
@@ -420,7 +420,7 @@ fun ManualKashidaInteractiveView(
 
                             FilledTonalButton(
                                 onClick = {
-                                    onApplyKashida(cleanWord, point.indexInWord, tatweelSliderVal, selectedWordIdx!!)
+                                    onApplyKashida(cleanWord, point.indexInWord, tatweelSliderVal, words[selectedWordIdx!!].second)
                                     selectedWordIdx = null
                                     selectedPointIdx = null
                                 }

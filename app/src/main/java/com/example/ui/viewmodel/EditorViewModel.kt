@@ -292,6 +292,16 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun insertPageBreak() {
+        val current = _uiState.value.text
+        val newText = if (current.isEmpty() || current.endsWith("\n")) {
+            current + "\u000c\n"
+        } else {
+            current + "\n\u000c\n"
+        }
+        onTextChanged(newText)
+    }
+
     fun undo() {
         if (undoStack.isNotEmpty()) {
             val prev = undoStack.removeAt(undoStack.lastIndex)

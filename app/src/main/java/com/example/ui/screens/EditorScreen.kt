@@ -262,7 +262,8 @@ fun EditorScreen(
                 Column(modifier = Modifier.fillMaxSize()) {
                     // Sleek horizontal toolbar with 32x32px tool icons and tooltips
                     HorizontalToolBar(
-                        onOpenSheet = { viewModel.openSheet(it) }
+                        onOpenSheet = { viewModel.openSheet(it) },
+                        onInsertPageBreak = { viewModel.insertPageBreak() }
                     )
 
                     // Exporting progress indicator
@@ -376,7 +377,8 @@ fun EditorScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HorizontalToolBar(
-    onOpenSheet: (ActiveSheet) -> Unit
+    onOpenSheet: (ActiveSheet) -> Unit,
+    onInsertPageBreak: () -> Unit = {}
 ) {
     Surface(
         color = MaterialTheme.colorScheme.surface,
@@ -407,6 +409,38 @@ fun HorizontalToolBar(
                     icon = icon,
                     onClick = { onOpenSheet(sheet) }
                 )
+            }
+
+            // Insert Page Break Button
+            val pageBreakTooltip = rememberTooltipState()
+            TooltipBox(
+                positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+                tooltip = {
+                    PlainTooltip {
+                        Text("إدراج فاصل صفحات", fontSize = 11.sp)
+                    }
+                },
+                state = pageBreakTooltip
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                    modifier = Modifier
+                        .size(38.dp)
+                        .testTag("tool_btn_page_break")
+                ) {
+                    IconButton(
+                        onClick = onInsertPageBreak,
+                        modifier = Modifier.size(38.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.PictureAsPdf,
+                            contentDescription = "إدراج فاصل صفحات",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
             }
         }
     }
